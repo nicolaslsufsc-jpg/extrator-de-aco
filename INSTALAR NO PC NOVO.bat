@@ -86,9 +86,9 @@ if errorlevel 1 (
     echo.
     echo [ATENCAO] Algum teste falhou.
     echo.
-    echo Se a mensagem falar em "SEM NADA.dxf nao encontrado", e so o
-    echo arquivo de referencia que nao esta na Area de Trabalho deste PC.
-    echo Copie "SEM NADA.dxf" para a Area de Trabalho e rode de novo.
+    echo A prancha de referencia "SEM NADA.dxf" ja vem junto nesta pasta,
+    echo entao o problema NAO e arquivo faltando: e alguma coisa no codigo.
+    echo Anote a mensagem acima antes de fechar esta janela.
     echo.
     pause
     exit /b 1
