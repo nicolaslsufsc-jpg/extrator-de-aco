@@ -20,6 +20,9 @@ instala só para o seu usuário. Só uma caixa pede administrador — a
 de administrador para instalar o py.exe"). Se você não tem a senha,
 **desmarque essa** e siga: o programa funciona igual.
 
+Se a configuração `Escolher onde obter aplicativos` aparecer cinza, sem
+deixar mudar, é política da empresa — aí o caminho é mesmo a Store.
+
 Também não precisa de administrador para os passos 3 e 4: as bibliotecas
 vão para a pasta `.venv` dentro do projeto, e a tela abre em
 `127.0.0.1`, que é o próprio computador (por isso nem o aviso do Firewall
@@ -50,7 +53,12 @@ Escolha **um** dos dois caminhos:
 
 **A) Só quero usar o programa** — baixe o ZIP:
 abra o endereço do projeto, botão verde `Code` → `Download ZIP`, e
-extraia numa pasta sua (por exemplo `C:\Extrator de Aco`).
+extraia **dentro da sua pasta pessoal**, por exemplo
+`C:\Users\<seu usuário>\Documents\Extrator de Aco`. Área de Trabalho ou
+Downloads também servem.
+
+Não extraia na raiz do `C:` (`C:\Extrator de Aco`): criar pasta ali exige
+senha de administrador.
 
 **B) Quero também mexer no código e salvar na nuvem** — instale o Git
 (https://git-scm.com/download/win, pode aceitar tudo como vem) e depois,
