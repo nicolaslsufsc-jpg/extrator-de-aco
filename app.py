@@ -114,10 +114,16 @@ def montar_parser() -> argparse.ArgumentParser:
     p.add_argument("--log-nivel", choices=["DEBUG", "INFO", "WARNING", "ERROR"],
                    help="sobrescreve log.nivel do config")
     p.add_argument("--limpo", action="store_true",
-                   help="planilha enxuta: so as abas de trecho, RESUMO GERAL "
-                        "e COMPARACAO FINAL. Mantem posicao e comprimento "
-                        "unitario (corte e dobra); tira o detalhamento "
-                        "linha-a-linha e as abas VERIFICACAO/INCONSISTENCIAS")
+                   help="so as abas de trecho, RESUMO GERAL e COMPARACAO "
+                        "FINAL. Mantem posicao e comprimento unitario (corte "
+                        "e dobra); tira o detalhamento linha-a-linha e as "
+                        "abas VERIFICACAO/INCONSISTENCIAS")
+    p.add_argument("--enxuto", action="store_true",
+                   help="mais restrito que --limpo: SO uma aba por trecho "
+                        "com a lista de corte e dobra, mais a aba "
+                        "CONFERENCIA (cada barra desenhada consta na tabela "
+                        "do projeto?). Problemas viram uma observacao no "
+                        "topo dela, sem aba de avisos")
     p.add_argument("--sem-abas-area", action="store_true",
                    help="gera so o resumo geral, sem uma aba por area")
     p.add_argument("--diagnostico", action="store_true",
@@ -149,6 +155,8 @@ def main(argv: list[str] | None = None) -> int:
         cfg.calculo.perda_percentual = args.perda
     if args.limpo:
         cfg.saida.modo_limpo = True
+    if args.enxuto:
+        cfg.saida.modo_enxuto = True
     if args.sem_abas_area:
         cfg.saida.abas_por_area = False
     cfg.projeto = args.projeto or nome_do_projeto(Path(args.input))
@@ -206,8 +214,12 @@ def main(argv: list[str] | None = None) -> int:
     alertas = sum(1 for i in resultado.inconsistencias
                   if i.severidade.value == "ALERTA")
     if erros or alertas:
-        log.warning("Confira a aba INCONSISTENCIAS: %d erro(s) e %d alerta(s).",
-                    erros, alertas)
+        # No modo enxuto a aba INCONSISTENCIAS nao existe: mandar conferi-la
+        # seria mandar procurar o que nao esta la.
+        onde = ("a observacao no topo da aba CONFERENCIA"
+                if cfg.saida.modo_enxuto else "a aba INCONSISTENCIAS")
+        log.warning("Confira %s: %d erro(s) e %d alerta(s).",
+                    onde, erros, alertas)
     return 0
 
 

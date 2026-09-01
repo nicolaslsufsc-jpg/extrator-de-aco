@@ -7,6 +7,10 @@ Estrutura do arquivo gerado:
     VERIFICACAO       soma das areas x tabela mae + consumo x limite
     INCONSISTENCIAS   tudo que exige conferencia humana
 
+No MODO ENXUTO (`saida.modo_enxuto`) sobram so as abas de trecho e uma
+aba CONFERENCIA, que confronta barra a barra com a tabela mestre. Todo o
+resto vira uma observacao no topo da CONFERENCIA.
+
 Formatacao: cabecalho congelado, autofiltro, colunas dimensionadas e
 casas decimais consistentes (definidas em calculo.casas_decimais).
 """
@@ -71,6 +75,7 @@ ABREVIACOES = {
     "INCONSISTENCIAS": "INCONSIST",
     "FORA_DO_ESCOPO": "FORA ESCOPO",
     "COMPARACAO FINAL": "COMPARACAO",
+    "CONFERENCIA": "CONFER",
 }
 
 LIMITE_ABA = 31
@@ -149,10 +154,14 @@ class Exportador:
 
         # Todas as abas que serao criadas, para calcular o corte do prefixo
         # uma unica vez e manter o nome do projeto identico em todas elas.
-        limpo = self.cfg.saida.modo_limpo
-        sufixos = ["RESUMO GERAL", "COMPARACAO FINAL"]
-        if not limpo:
-            sufixos += ["VERIFICACAO", "INCONSISTENCIAS"]
+        enxuto = self.cfg.saida.modo_enxuto
+        limpo = self._modo_limpo()
+        if enxuto:
+            sufixos = ["CONFERENCIA"]
+        else:
+            sufixos = ["RESUMO GERAL", "COMPARACAO FINAL"]
+            if not limpo:
+                sufixos += ["VERIFICACAO", "INCONSISTENCIAS"]
         if self.cfg.saida.abas_por_area and not df.empty:
             sufixos += self._ordenar_areas(df)[:self.cfg.saida.max_abas_area]
         projeto = _prefixo_comum(self.cfg.projeto, sufixos)
@@ -170,12 +179,16 @@ class Exportador:
             usados: set[str] = set()
 
             # --- 1. tabela mae -----------------------------------------
-            subtitulo = self._subtitulo(resultado)
-            if limpo:
-                subtitulo += "\n" + self._aviso_inconsistencias(resultado)
-            self._aba_resumo(wb, _nome_aba("RESUMO GERAL", usados, projeto), df,
-                             titulo="RESUMO GERAL DE ACO",
-                             subtitulo=subtitulo)
+            # No modo enxuto ela nao existe: a planilha e a lista de corte
+            # e dobra de cada trecho, mais a conferencia. Somar tudo de
+            # novo numa aba mae seria justamente a informacao a mais.
+            if not enxuto:
+                subtitulo = self._subtitulo(resultado)
+                if limpo:
+                    subtitulo += "\n" + self._aviso_inconsistencias(resultado)
+                self._aba_resumo(wb, _nome_aba("RESUMO GERAL", usados, projeto),
+                                 df, titulo="RESUMO GERAL DE ACO",
+                                 subtitulo=subtitulo)
 
             # --- 2. uma aba por area -----------------------------------
             areas_exportadas: list[str] = []
@@ -202,24 +215,34 @@ class Exportador:
                         "so no RESUMO GERAL e na VERIFICACAO",
                         len(ordem) - limite, limite)
 
-            # --- 3. comparacao final -----------------------------------
-            self._aba_comparacao(
-                wb, _nome_aba("COMPARACAO FINAL", usados, projeto),
-                df, resultado)
-
-            # --- 4 e 5. so no modo completo ----------------------------
-            # No modo limpo estas duas abas saem do arquivo; o balanco de
-            # erros vira uma linha de aviso no topo do RESUMO GERAL e o
-            # detalhe continua inteiro no extrator_aco.log.
-            if not limpo:
-                self._aba_verificacao(
-                    wb, _nome_aba("VERIFICACAO", usados, projeto), df,
-                    areas_exportadas)
-                self._aba_inconsistencias(
-                    wb, _nome_aba("INCONSISTENCIAS", usados, projeto), resultado)
+            # --- 3. conferencia contra a tabela mestre -----------------
+            # No modo enxuto esta e a UNICA aba alem das de trecho.
+            if enxuto:
+                self._aba_conferencia(
+                    wb, _nome_aba("CONFERENCIA", usados, projeto),
+                    df, resultado, areas_exportadas)
+                self.log.info("Modo enxuto: so as abas de trecho e a "
+                              "CONFERENCIA; o detalhe continua no %s",
+                              self.cfg.log.arquivo)
             else:
-                self.log.info("Modo limpo: VERIFICACAO e INCONSISTENCIAS nao "
-                              "foram geradas; veja o log para o detalhe")
+                self._aba_comparacao(
+                    wb, _nome_aba("COMPARACAO FINAL", usados, projeto),
+                    df, resultado)
+
+                # --- 4 e 5. so no modo completo ------------------------
+                # No modo limpo estas duas abas saem do arquivo; o balanco
+                # de erros vira uma linha de aviso no topo do RESUMO GERAL
+                # e o detalhe continua inteiro no extrator_aco.log.
+                if not limpo:
+                    self._aba_verificacao(
+                        wb, _nome_aba("VERIFICACAO", usados, projeto), df,
+                        areas_exportadas)
+                    self._aba_inconsistencias(
+                        wb, _nome_aba("INCONSISTENCIAS", usados, projeto),
+                        resultado)
+                else:
+                    self.log.info("Modo limpo: VERIFICACAO e INCONSISTENCIAS "
+                                  "nao foram geradas; veja o log para o detalhe")
         finally:
             wb.close()
 
@@ -227,6 +250,14 @@ class Exportador:
         return destino
 
     # ------------------------------------------------------------------
+    def _modo_limpo(self) -> bool:
+        """O modo enxuto e mais restrito que o limpo, entao inclui o limpo.
+
+        Sem isso as abas de trecho do modo enxuto voltariam a trazer o
+        bloco DETALHAMENTO e a coluna Prancha - o oposto do pedido.
+        """
+        return self.cfg.saida.modo_limpo or self.cfg.saida.modo_enxuto
+
     def _aviso_inconsistencias(self, resultado: ResultadoProcessamento) -> str:
         """Uma linha com o balanco, para o modo limpo nao esconder problema."""
         erros = sum(1 for i in resultado.inconsistencias
@@ -340,7 +371,7 @@ class Exportador:
         """
         ws = wb.add_worksheet(nome)
         f = self.f
-        limpo = self.cfg.saida.modo_limpo
+        limpo = self._modo_limpo()
         # As colunas sao SEMPRE as completas: a planilha e uma lista de
         # corte e dobra, entao posicao e comprimento unitario de cada barra
         # tem de aparecer mesmo no modo limpo.
@@ -449,7 +480,7 @@ class Exportador:
             ws.freeze_panes(primeira_cabecalho + 1, 1)
             ws.autofilter(primeira_cabecalho, 0, primeira_cabecalho, ncol - 1)
 
-        # O bloco linha-a-linha nao existe no modo limpo.
+        # O bloco linha-a-linha nao existe no modo limpo nem no enxuto.
         if self.cfg.saida.incluir_diagnostico and not limpo:
             self._bloco_detalhe(wb, ws, df, linha + 2, ncol)
 
@@ -838,6 +869,229 @@ class Exportador:
     # ==================================================================
     # ABA VERIFICACAO
     # ==================================================================
+    # ==================================================================
+    # ABA DE CONFERENCIA (modo enxuto)
+    # ==================================================================
+    # Tolerancia do comprimento unitario, em cm. Mesma folga usada em
+    # rateio.aplicar_formato_do_gabarito: abaixo disso e arredondamento
+    # de desenho, nao barra diferente.
+    TOLERANCIA_COMPRIMENTO_CM = 1.0
+
+    def _aba_conferencia(self, wb, nome: str, df: pd.DataFrame,
+                         resultado: ResultadoProcessamento,
+                         areas_exportadas: list[str]) -> None:
+        """Cada barra desenhada consta na tabela mestre do projeto?
+
+        Uma linha por (trecho, posicao, bitola, comprimento). A pergunta
+        que a aba responde e de identidade da barra: a posicao existe na
+        tabela do projeto e com o mesmo comprimento unitario?
+
+        A QUANTIDADE aparece ao lado, mas NAO reprova nada. O fluxo normal
+        e recortar o desenho num trecho e deixar a tabela mestre descrevendo
+        o pavimento inteiro - divergir de quantidade ali e o esperado, nao
+        defeito.
+        """
+        ws = wb.add_worksheet(nome)
+        f = self.f
+        colunas = [("Trecho", 26), ("Posicao", 12), ("Bitola (mm)", 12),
+                   ("Qtd no desenho", 15), ("Comp. unit. desenho (cm)", 22),
+                   ("Comp. unit. tabela (cm)", 22), ("Qtd na tabela", 14),
+                   ("Situacao", 24)]
+        ncol = len(colunas)
+        for j, (_, largura) in enumerate(colunas):
+            ws.set_column(j, j, largura)
+
+        ws.merge_range(0, 0, 0, ncol - 1,
+                       "CONFERENCIA - BARRAS DESENHADAS x TABELA DO PROJETO",
+                       f["titulo"])
+        ws.set_row(0, 24)
+        ws.merge_range(1, 0, 1, ncol - 1, self._subtitulo(resultado),
+                       f["subtitulo"])
+
+        linhas = self._linhas_conferencia(df, resultado)
+
+        # --- observacao: o unico lugar onde problema e reportado -------
+        fmt, texto = self._observacao_conferencia(resultado, linhas,
+                                                  df, areas_exportadas)
+        ws.merge_range(2, 0, 2, ncol - 1, texto, fmt)
+        ws.set_row(2, 30)
+
+        if df.empty:
+            ws.write(4, 0, "Nenhuma posicao processada.", f["texto"])
+            return
+
+        linha = 4
+        for j, (rotulo, _) in enumerate(colunas):
+            ws.write(linha, j, rotulo, f["cabecalho"])
+        cabecalho = linha
+        linha += 1
+
+        for r in linhas:
+            ws.write(linha, 0, r["trecho"], f["texto"])
+            ws.write(linha, 1, r["posicao"], f["texto_c"])
+            ws.write_number(linha, 2, r["bitola"], f["texto_c"])
+            ws.write_number(linha, 3, r["qtd_desenho"], f["qtd"])
+            ws.write_number(linha, 4, r["comp_desenho"], f["comp_unit"])
+            if r["comp_tabela"] is None:
+                ws.write(linha, 5, "-", f["texto_c"])
+            else:
+                ws.write_number(linha, 5, r["comp_tabela"], f["comp_unit"])
+            if r["qtd_tabela"] is None:
+                ws.write(linha, 6, "-", f["texto_c"])
+            else:
+                ws.write_number(linha, 6, r["qtd_tabela"], f["qtd"])
+            ws.write(linha, 7, r["situacao"], f[r["formato"]])
+            linha += 1
+
+        ws.freeze_panes(cabecalho + 1, 2)
+        ws.autofilter(cabecalho, 0, cabecalho, ncol - 1)
+
+        # --- balanco ---------------------------------------------------
+        linha += 1
+        contagem = self._contar_situacoes(linhas)
+        ws.write(linha, 0, "BALANCO", f["cabecalho"])
+        ws.write(linha, 1, "Barras", f["cabecalho"])
+        linha += 1
+        for rotulo, chave, formato in [
+                ("Conferem com a tabela", "ok", "ok"),
+                ("Comprimento diferente", "comprimento", "alerta"),
+                ("Nao constam na tabela", "ausente", "excedido"),
+                ("Sem comparacao possivel (VAR.)", "variavel", "alerta")]:
+            if not contagem[chave] and chave in ("variavel",):
+                continue
+            ws.write(linha, 0, rotulo, f["texto"])
+            ws.write_number(linha, 1, contagem[chave], f[formato])
+            linha += 1
+
+        # --- por que a quantidade nao reprova --------------------------
+        linha += 1
+        ws.merge_range(
+            linha, 0, linha, ncol - 1,
+            "A coluna de quantidade e informativa: o desenho costuma ser um "
+            "recorte de um trecho, enquanto a tabela do projeto descreve o "
+            "pavimento inteiro. Diferenca de quantidade ali e esperada. O que "
+            "vale conferir e a IDENTIDADE da barra: posicao, bitola e "
+            "comprimento unitario.", f["subtitulo"])
+
+    # ------------------------------------------------------------------
+    def _linhas_conferencia(self, df: pd.DataFrame,
+                            resultado: ResultadoProcessamento) -> list[dict]:
+        """Confronta cada barra desenhada com a tabela mestre.
+
+        Agrupa por (trecho, posicao, bitola, comprimento unitario): a mesma
+        posicao aparece varias vezes no desenho, uma por faixa de
+        distribuicao, e listar cada ocorrencia repetiria a mesma pergunta.
+        """
+        if df.empty:
+            return []
+
+        # A tabela mestre guarda a posicao sem o "N" que o desenho usa.
+        por_chave = {(str(l.posicao), round(float(l.bitola_mm), 3)): l
+                     for l in resultado.tabela_mestre}
+
+        chaves = ["Area", "Posicao", "Bitola (mm)", "Comprimento unitario (cm)"]
+        agrupado = (df.groupby(chaves, dropna=False)["Quantidade"]
+                    .sum().reset_index())
+
+        linhas = []
+        for _, r in agrupado.iterrows():
+            rotulo = str(r["Posicao"])
+            bitola = float(r["Bitola (mm)"])
+            comp = float(r["Comprimento unitario (cm)"])
+            mestre = por_chave.get((rotulo.lstrip("Nn"), round(bitola, 3)))
+
+            if mestre is None:
+                situacao, formato = "NAO CONSTA NA TABELA", "excedido"
+                comp_tab = qtd_tab = None
+            else:
+                comp_tab = mestre.comprimento_unitario_cm
+                qtd_tab = float(mestre.quantidade)
+                if mestre.variavel or not comp_tab:
+                    situacao, formato = "TABELA: MEDIDA VARIAVEL", "alerta"
+                elif abs(comp_tab - comp) > self.TOLERANCIA_COMPRIMENTO_CM:
+                    situacao, formato = "COMPRIMENTO DIFERENTE", "alerta"
+                else:
+                    situacao, formato = "CONFERE", "ok"
+
+            linhas.append({
+                "trecho": str(r["Area"]),
+                "posicao": rotulo,
+                "bitola": bitola,
+                "qtd_desenho": float(r["Quantidade"]),
+                "comp_desenho": comp,
+                "comp_tabela": comp_tab,
+                "qtd_tabela": qtd_tab,
+                "situacao": situacao,
+                "formato": formato,
+            })
+        return linhas
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _contar_situacoes(linhas: list[dict]) -> dict:
+        por_situacao = {"ok": 0, "comprimento": 0, "ausente": 0, "variavel": 0}
+        chave = {"CONFERE": "ok",
+                 "COMPRIMENTO DIFERENTE": "comprimento",
+                 "NAO CONSTA NA TABELA": "ausente",
+                 "TABELA: MEDIDA VARIAVEL": "variavel"}
+        for r in linhas:
+            por_situacao[chave[r["situacao"]]] += 1
+        return por_situacao
+
+    # ------------------------------------------------------------------
+    def _observacao_conferencia(self, resultado: ResultadoProcessamento,
+                                linhas: list[dict], df: pd.DataFrame,
+                                areas_exportadas: list[str]) -> tuple:
+        """A UNICA linha de aviso do modo enxuto.
+
+        Sem aba de inconsistencias, um problema so tem este lugar para
+        aparecer - entao ele nao pode ser omitido nem virar paragrafo.
+        """
+        f = self.f
+        avisos: list[str] = []
+
+        if not resultado.tabela_mestre:
+            return (f["alerta"],
+                    "Nenhuma tabela de aco foi lida na prancha: nao ha contra "
+                    "o que conferir. As abas de trecho continuam validas; "
+                    f"o motivo esta no {self.cfg.log.arquivo}.")
+
+        c = self._contar_situacoes(linhas)
+        if c["ausente"]:
+            avisos.append(f"{c['ausente']} barra(s) NAO constam na tabela do "
+                          f"projeto")
+        if c["comprimento"]:
+            avisos.append(f"{c['comprimento']} com comprimento diferente do "
+                          f"da tabela")
+
+        nao_lidos = resultado.estatisticas.textos_nao_interpretados
+        if nao_lidos:
+            avisos.append(f"{nao_lidos} texto(s) de armadura nao foram "
+                          f"interpretados - esse aco esta FORA da planilha")
+
+        sem_area = [self.cfg.areas.nome_sem_area,
+                    self.cfg.areas.nome_fora_escopo]
+        if not df.empty:
+            soltas = int((df["Area"].isin(sem_area)).sum())
+            if soltas:
+                avisos.append(f"{soltas} barra(s) fora de qualquer trecho")
+
+        if self.cfg.saida.abas_por_area and not df.empty:
+            faltando = len(self._ordenar_areas(df)) - len(areas_exportadas)
+            if faltando > 0:
+                avisos.append(f"{faltando} trecho(s) sem aba propria (limite "
+                              f"saida.max_abas_area)")
+
+        if not avisos:
+            return (f["ok"],
+                    f"Nenhum problema: as {len(linhas)} barra(s) desenhadas "
+                    f"constam na tabela do projeto, com o mesmo comprimento.")
+
+        formato = f["excedido"] if (c["ausente"] or nao_lidos) else f["alerta"]
+        return (formato, "CONFERIR: " + "; ".join(avisos)
+                + f".  Detalhe completo no {self.cfg.log.arquivo}.")
+
+    # ------------------------------------------------------------------
     def _aba_verificacao(self, wb, nome: str, df: pd.DataFrame,
                          areas_exportadas: list[str]) -> None:
         ws = wb.add_worksheet(nome)

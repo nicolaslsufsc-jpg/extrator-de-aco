@@ -321,3 +321,87 @@ def test_criterio_fora_do_escopo_preserva_o_total_geral(cfg, dxf_referencia, tmp
     total_escopo = sum(p.peso_liquido_kg
                        for p in processar(dxf_referencia, cfg).posicoes)
     assert total_escopo == pytest.approx(total_centroide, rel=1e-9)
+
+
+# =============================================================================
+# MODO ENXUTO SOBRE A PRANCHA DE REFERENCIA
+# =============================================================================
+
+@pytest.mark.slow
+def test_conferencia_reconhece_todas_as_barras_da_prancha(cfg, dxf_referencia,
+                                                          tmp_path):
+    """As 9 posicoes desenhadas constam na tabela do projeto, com o mesmo
+    comprimento unitario. Se alguma parar de bater, a leitura mudou."""
+    import openpyxl
+
+    from extrator.exportacao import Exportador
+    from extrator.log_config import configurar_log
+    from extrator.pipeline import processar
+
+    configurar_log(cfg.log, tmp_path)
+    cfg.saida.modo_enxuto = True
+    cfg.projeto = "SEM NADA"
+    resultado = processar(dxf_referencia, cfg)
+    destino = Exportador(cfg).exportar(resultado, tmp_path / "enxuto.xlsx")
+
+    wb = openpyxl.load_workbook(destino)
+    # So o trecho e a conferencia - nada de resumo, comparacao ou avisos.
+    assert sorted(wb.sheetnames) == ["SEM NADA - CONFERENCIA",
+                                     "SEM NADA - TRECHO A"]
+
+    ws = wb["SEM NADA - CONFERENCIA"]
+    linhas = [r for r in ws.iter_rows(values_only=True)]
+    situacoes = [r[7] for r in linhas
+                 if r[7] and r[7] not in ("Situacao",)]
+    assert len(situacoes) == 9
+    assert set(situacoes) == {"CONFERE"}
+
+
+@pytest.mark.slow
+def test_conferencia_nao_reprova_por_quantidade(cfg, dxf_referencia, tmp_path):
+    """O desenho e um recorte: a tabela do projeto descreve o pavimento
+    inteiro, entao a quantidade diverge de proposito. Isso NAO e problema
+    - so a identidade da barra (posicao, bitola, comprimento) reprova."""
+    from extrator.exportacao import Exportador
+    from extrator.log_config import configurar_log
+    from extrator.pipeline import processar
+
+    configurar_log(cfg.log, tmp_path)
+    cfg.saida.modo_enxuto = True
+    resultado = processar(dxf_referencia, cfg)
+
+    exp = Exportador(cfg)
+    from extrator.calculo import montar_dataframe
+    df = montar_dataframe(resultado.posicoes, cfg)
+    linhas = exp._linhas_conferencia(df, resultado)
+
+    # Ha divergencia de quantidade de verdade nesta prancha...
+    assert any(r["qtd_tabela"] and r["qtd_desenho"] != r["qtd_tabela"]
+               for r in linhas)
+    # ...e mesmo assim nenhuma barra e reprovada.
+    assert {r["situacao"] for r in linhas} == {"CONFERE"}
+
+
+@pytest.mark.slow
+def test_conferencia_acusa_posicao_que_nao_esta_na_tabela(cfg, dxf_referencia,
+                                                          tmp_path):
+    """Barra desenhada que o projeto nao declara e o erro que a aba existe
+    para pegar - o aco entra no corte sem respaldo da tabela."""
+    from extrator.exportacao import Exportador
+    from extrator.log_config import configurar_log
+    from extrator.pipeline import processar
+
+    configurar_log(cfg.log, tmp_path)
+    cfg.saida.modo_enxuto = True
+    resultado = processar(dxf_referencia, cfg)
+
+    # Some com a tabela mestre de uma posicao so.
+    alvo = resultado.posicoes[0].posicao
+    resultado.tabela_mestre = [l for l in resultado.tabela_mestre
+                               if str(l.posicao) != str(alvo)]
+
+    exp = Exportador(cfg)
+    from extrator.calculo import montar_dataframe
+    linhas = exp._linhas_conferencia(
+        montar_dataframe(resultado.posicoes, cfg), resultado)
+    assert "NAO CONSTA NA TABELA" in {r["situacao"] for r in linhas}

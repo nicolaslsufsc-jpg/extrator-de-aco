@@ -383,6 +383,13 @@ class SaidaCfg(_Base):
     # sumir. O que sai e o bloco DETALHAMENTO (uma linha por texto lido
     # no desenho) e as abas VERIFICACAO e INCONSISTENCIAS.
     modo_limpo: bool = False
+    # MODO ENXUTO: a planilha fica so com UMA ABA POR TRECHO (a listagem
+    # de barras para corte e dobra) e UMA aba CONFERENCIA, que diz se cada
+    # barra desenhada consta na tabela mestre do projeto.
+    # Nao gera RESUMO GERAL, COMPARACAO FINAL nem INCONSISTENCIAS: o que
+    # houver de problema vira uma observacao no topo da CONFERENCIA.
+    # Vale mais que `modo_limpo` quando os dois estiverem ligados.
+    modo_enxuto: bool = False
     abas_por_area: bool = True
     # Dentro da aba de cada trecho, separar a armadura por sentido.
     agrupar_por_sentido: bool = True

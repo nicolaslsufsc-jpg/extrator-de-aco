@@ -505,3 +505,81 @@ def test_o_rateio_nao_inventa_posicao_que_o_desenho_nao_tem(cfg_trechos):
     assert [p.posicao for p in novas] == ["1"], "inventou a N99"
     assert novas[0].quantidade == 10          # a N1 recebeu a qtd da tabela
     assert "POSICAO_SEM_LOCALIZACAO" in [i.tipo.name for i in res.inconsistencias]
+
+
+# =============================================================================
+# MODO ENXUTO
+# So a lista de corte e dobra de cada trecho e uma aba de conferencia.
+# =============================================================================
+
+def test_modo_enxuto_gera_so_as_abas_de_trecho_e_a_conferencia(
+        cfg_trechos, prancha_trechos, tmp_path):
+    cfg_trechos.saida.modo_enxuto = True
+    wb, _ = _abrir(cfg_trechos, prancha_trechos, tmp_path)
+    abas = wb.sheetnames
+
+    assert "Obra - TRECHO 01" in abas and "Obra - TRECHO 02" in abas
+    assert [a for a in abas if "CONFER" in a.upper()]
+    # Nenhuma das abas de leitura pesada sobrevive.
+    for indesejada in ("RESUMO GERAL", "COMPARACAO", "VERIFICACAO",
+                       "INCONSIST"):
+        assert not [a for a in abas if indesejada in a.upper()], indesejada
+    # SEM_AREA tambem ganha aba: aco que nao caiu em trecho nenhum nao
+    # pode sumir da planilha so porque o modo e enxuto.
+    assert "Obra - SEM_AREA" in abas
+    # Uma aba por trecho + a conferencia, e nada alem disso.
+    assert len(abas) == 4
+
+
+def test_modo_enxuto_MANTEM_a_lista_de_corte_e_dobra(cfg_trechos,
+                                                     prancha_trechos, tmp_path):
+    """Tirar aba nao pode tirar a medida da barra: sem posicao e sem
+    comprimento unitario a planilha deixa de servir para cortar aco."""
+    cfg_trechos.saida.modo_enxuto = True
+    wb, _ = _abrir(cfg_trechos, prancha_trechos, tmp_path)
+    texto = _texto_da_aba(wb["Obra - TRECHO 01"])
+    assert "Posicao" in texto
+    assert "Comprimento unitario (cm)" in texto
+
+
+def test_modo_enxuto_tira_o_detalhamento_linha_a_linha(cfg_trechos,
+                                                       prancha_trechos, tmp_path):
+    cfg_trechos.saida.modo_enxuto = True
+    cfg_trechos.saida.incluir_diagnostico = True
+    wb, _ = _abrir(cfg_trechos, prancha_trechos, tmp_path)
+    assert "DETALHAMENTO" not in _texto_da_aba(wb["Obra - TRECHO 01"]).upper()
+
+
+def test_modo_enxuto_nao_altera_nenhum_numero(cfg_trechos, prancha_trechos,
+                                              tmp_path):
+    """A planilha muda de forma, nunca de conteudo."""
+    cfg_trechos.saida.modo_enxuto = False
+    _, completo = _abrir(cfg_trechos, prancha_trechos, tmp_path, "a.xlsx")
+    cfg_trechos.saida.modo_enxuto = True
+    _, enxuto = _abrir(cfg_trechos, prancha_trechos, tmp_path, "b.xlsx")
+
+    peso = lambda r: round(sum(p.peso_com_perda_kg for p in r.posicoes), 6)
+    assert peso(completo) == peso(enxuto)
+    assert len(completo.posicoes) == len(enxuto.posicoes)
+
+
+def test_modo_enxuto_sem_tabela_mestre_diz_que_nao_ha_o_que_conferir(
+        cfg_trechos, prancha_trechos, tmp_path):
+    """O DXF sintetico nao tem tabela de aco desenhada. A aba nao pode
+    fingir que conferiu: tem de dizer que faltou o gabarito."""
+    cfg_trechos.saida.modo_enxuto = True
+    wb, res = _abrir(cfg_trechos, prancha_trechos, tmp_path)
+    assert not res.tabela_mestre
+    aba = [a for a in wb.sheetnames if "CONFER" in a.upper()][0]
+    texto = _texto_da_aba(wb[aba]).lower()
+    assert "nenhuma tabela" in texto
+
+
+def test_modo_enxuto_vale_mais_que_o_modo_limpo(cfg_trechos, prancha_trechos,
+                                                tmp_path):
+    """Os dois ligados nao podem gerar uma planilha meio-termo."""
+    cfg_trechos.saida.modo_limpo = True
+    cfg_trechos.saida.modo_enxuto = True
+    wb, _ = _abrir(cfg_trechos, prancha_trechos, tmp_path)
+    assert not [a for a in wb.sheetnames if "RESUMO GERAL" in a.upper()]
+    assert [a for a in wb.sheetnames if "CONFER" in a.upper()]

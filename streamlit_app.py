@@ -91,12 +91,27 @@ with st.sidebar:
         "Separar por sentido dentro do trecho", True,
         help="Cada aba de trecho ganha uma seção por direção da armadura "
              "(X horizontal, Y vertical), com subtotais próprios.")
-    cfg.saida.modo_limpo = st.checkbox(
-        "Planilha limpa", cfg.saida.modo_limpo,
-        help="Só as abas de trecho, RESUMO GERAL e COMPARAÇÃO FINAL. "
-             "Mantém posição e comprimento unitário de cada barra (é lista "
-             "de corte e dobra); tira o detalhamento linha-a-linha e as "
-             "abas VERIFICAÇÃO e INCONSISTÊNCIAS.")
+    # Um radio, e nao dois checkboxes: "limpa" e "enxuta" sao graus da
+    # mesma coisa, e marcar os dois nao significaria nada.
+    MODOS = {
+        "Enxuta (recomendada)":
+            "Uma aba por trecho com a lista de corte e dobra, mais a aba "
+            "CONFERÊNCIA (cada barra desenhada consta na tabela do "
+            "projeto?). Nada mais. Problemas viram uma observação no topo "
+            "da CONFERÊNCIA.",
+        "Limpa":
+            "As abas de trecho, o RESUMO GERAL e a COMPARAÇÃO FINAL. Sem "
+            "o detalhamento linha-a-linha e sem as abas VERIFICAÇÃO e "
+            "INCONSISTÊNCIAS.",
+        "Completa":
+            "Tudo: RESUMO GERAL, abas de trecho, COMPARAÇÃO FINAL, "
+            "VERIFICAÇÃO, INCONSISTÊNCIAS e o detalhamento linha-a-linha.",
+    }
+    modo = st.radio("Planilha", list(MODOS),
+                    help="\n\n".join(f"**{k}** — {v}" for k, v in MODOS.items()))
+    cfg.saida.modo_enxuto = modo.startswith("Enxuta")
+    cfg.saida.modo_limpo = modo == "Limpa"
+    st.caption(MODOS[modo])
     cfg.saida.incluir_diagnostico = st.checkbox(
         "Incluir colunas de diagnóstico", True,
         help="Handle, coordenadas e score da associação - é o que permite "
@@ -227,27 +242,33 @@ if st.button("Processar", type="primary", disabled=entrada is None,
 
     # --- tabelas na tela ---------------------------------------------
     if not df.empty:
-        t1, t2, t5, t3, t4 = st.tabs(["Por bitola", "Por trecho",
-                                      "Por sentido", "Inconsistências",
-                                      "Detalhamento"])
-        with t1:
-            st.dataframe(resumo_por_bitola(df), use_container_width=True)
-        with t2:
+        # Na planilha enxuta a tela acompanha: os avisos ja sairam acima,
+        # em uma linha. Repeti-los numa aba so aumentaria o que ha para ler.
+        rotulos = ["Por trecho", "Por sentido", "Por bitola"]
+        if not cfg.saida.modo_enxuto:
+            rotulos += ["Inconsistências", "Detalhamento"]
+        abas = dict(zip(rotulos, st.tabs(rotulos)))
+
+        with abas["Por trecho"]:
             st.dataframe(resumo_por_area(df), use_container_width=True)
-        with t5:
+        with abas["Por sentido"]:
             st.dataframe(resumo_por_sentido(df), use_container_width=True)
-        with t3:
-            if resultado.inconsistencias:
-                st.dataframe(pd.DataFrame([{
-                    "Severidade": i.severidade.value, "Tipo": i.tipo.value,
-                    "Descrição": i.descricao, "Prancha": i.prancha,
-                    "Layer": i.layer, "Handle": i.handle, "Texto": i.texto,
-                    "Ocorrências": i.ocorrencias,
-                } for i in resultado.inconsistencias]), use_container_width=True)
-            else:
-                st.success("Nenhuma inconsistência.")
-        with t4:
-            st.dataframe(df, use_container_width=True)
+        with abas["Por bitola"]:
+            st.dataframe(resumo_por_bitola(df), use_container_width=True)
+        if "Inconsistências" in abas:
+            with abas["Inconsistências"]:
+                if resultado.inconsistencias:
+                    st.dataframe(pd.DataFrame([{
+                        "Severidade": i.severidade.value, "Tipo": i.tipo.value,
+                        "Descrição": i.descricao, "Prancha": i.prancha,
+                        "Layer": i.layer, "Handle": i.handle, "Texto": i.texto,
+                        "Ocorrências": i.ocorrencias,
+                    } for i in resultado.inconsistencias]),
+                        use_container_width=True)
+                else:
+                    st.success("Nenhuma inconsistência.")
+            with abas["Detalhamento"]:
+                st.dataframe(df, use_container_width=True)
 
     # --- log ----------------------------------------------------------
     log_path = saida / cfg.log.arquivo
