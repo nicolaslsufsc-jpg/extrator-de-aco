@@ -35,6 +35,7 @@ def _restaurar_cfg(cfg):
         "abas_por_area": cfg.saida.abas_por_area,
         "por_sentido": cfg.saida.agrupar_por_sentido,
         "modo_limpo": cfg.saida.modo_limpo,
+        "modo_enxuto": cfg.saida.modo_enxuto,
         "fonte_qtd": cfg.calculo.fonte_quantidade,
         "limpar_prefixo": cfg.areas.limpar_prefixo_layer,
         # test_trechos aponta as layers para o DXF sintetico; sem restaurar,
@@ -53,6 +54,7 @@ def _restaurar_cfg(cfg):
     cfg.saida.abas_por_area = guardado["abas_por_area"]
     cfg.saida.agrupar_por_sentido = guardado["por_sentido"]
     cfg.saida.modo_limpo = guardado["modo_limpo"]
+    cfg.saida.modo_enxuto = guardado["modo_enxuto"]
     cfg.calculo.fonte_quantidade = guardado["fonte_qtd"]
     cfg.areas.limpar_prefixo_layer = guardado["limpar_prefixo"]
     cfg.layers.texto_armadura = guardado["texto_armadura"]

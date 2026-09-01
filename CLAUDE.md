@@ -78,7 +78,26 @@ desenhado**. No arquivo de referência a cobertura é 3%.
 Vai inteira para o lado onde ela mais está (`areas.criterio_divisa =
 "maior_parte"`). Não se descarta aço e não se corta barra em dois.
 
-### 6. Trecho é o nome da layer
+### 6. A planilha tem três formatos, e o padrão do autor é o enxuto
+
+`saida.modo_enxuto` (ou `--enxuto`) gera **uma aba por trecho** — a lista
+de corte e dobra — e **uma aba `CONFERENCIA`**, que responde barra a
+barra: esta posição consta na tabela mestre, com o mesmo comprimento
+unitário? Não gera `RESUMO GERAL`, `COMPARACAO FINAL` nem
+`INCONSISTENCIAS`; todo problema vira **uma observação** no topo da
+`CONFERENCIA`.
+
+Na `CONFERENCIA`, **quantidade não reprova nada**. Pela regra 4 o desenho
+é um recorte e a tabela descreve o pavimento inteiro, então divergir de
+quantidade é o esperado. O que reprova é a identidade da barra: posição,
+bitola e comprimento unitário. Teste travando isso:
+`test_conferencia_nao_reprova_por_quantidade`.
+
+`modo_limpo` continua existindo (abas de trecho + `RESUMO GERAL` +
+`COMPARACAO FINAL`) e o modo completo também. Com os dois ligados, o
+enxuto vence.
+
+### 7. Trecho é o nome da layer
 
 Uma layer `TRECHO A` vira o trecho `TRECHO A`. Nomes vindos de layer **nunca**
 são desambiguados: se a mesma layer aparecer em dois lugares, é o mesmo

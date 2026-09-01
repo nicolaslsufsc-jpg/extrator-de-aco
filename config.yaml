@@ -452,6 +452,19 @@ saida:
   #     uma linha de aviso no topo do RESUMO GERAL, e o detalhe continua
   #     inteiro no extrator_aco.log).
   modo_limpo: false
+  # MODO ENXUTO (--enxuto na linha de comando):
+  # mais restrito que o modo limpo. A planilha fica com UMA ABA POR TRECHO
+  # - a lista de corte e dobra - e UMA aba CONFERENCIA, que responde,
+  # barra a barra: esta posicao consta na tabela mestre do projeto, com o
+  # mesmo comprimento unitario?
+  # NAO gera RESUMO GERAL, COMPARACAO FINAL nem INCONSISTENCIAS. Todo
+  # problema encontrado vira UMA observacao no topo da CONFERENCIA.
+  # A quantidade aparece ao lado da tabela mestre, mas nao reprova nada:
+  # com o desenho recortado num trecho e a tabela descrevendo o pavimento
+  # inteiro, divergir de quantidade e o esperado (ver 'recorte' no
+  # PREMISSAS.md). O que reprova e a identidade da barra.
+  # Quando os dois estiverem ligados, o enxuto e que vale.
+  modo_enxuto: false
   # Uma aba por trecho (nao uma aba por sentido).
   abas_por_area: true
   # Dentro da aba do trecho, separar o aco por sentido, cada secao com os
