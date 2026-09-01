@@ -27,6 +27,23 @@ do Windows costuma aparecer). A única exceção é o ODA File Converter, o
 conversor de `.dwg`, que em geral exige administrador — sem ele, use os
 arquivos `.dxf`.
 
+### Se o Windows bloquear o instalador
+
+Mensagem do tipo **"bloqueado"**, "aplicativos seguros" ou "não é um
+aplicativo verificado pela Microsoft": o PC está configurado para só
+aceitar programas da Microsoft Store. Duas saídas:
+
+**A mais simples — instale o Python pela própria Store.** Ele está
+publicado lá oficialmente pela *Python Software Foundation*. Abra a
+Microsoft Store, busque `Python 3.13` (ou 3.12), confira o publicador e
+instale. É o mesmo Python, já se registra sozinho e não precisa da caixa
+`Add Python to PATH`.
+
+**Ou libere a trava:** Configurações → Aplicativos → Configurações
+avançadas de aplicativos → `Escolher onde obter aplicativos` → mude para
+`Qualquer lugar`. Às vezes a própria janela do bloqueio já oferece um
+botão `Instalar mesmo assim`.
+
 ## Passo 2 — trazer o projeto para o PC
 
 Escolha **um** dos dois caminhos:
@@ -101,6 +118,11 @@ marcando a caixa.
 
 **"Este computador ainda nao foi preparado"** ao abrir o programa —
 faltou rodar o `INSTALAR NO PC NOVO.bat` antes.
+
+**O Windows avisa ao abrir os `.bat`** — é o SmartScreen, porque os
+arquivos vieram da internet dentro do ZIP. Clique em `Mais informações` →
+`Executar assim mesmo`. São arquivos de texto do próprio projeto; dá para
+abrir no Bloco de Notas e ler o que fazem.
 
 **A tela abre mas não muda nada depois de mexer no código** — o Python só
 recarrega os arquivos ao reiniciar. Feche a janela preta e abra de novo.
