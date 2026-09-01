@@ -1,0 +1,47 @@
+# =============================================================================
+# DESENHOS E DADOS DE OBRA - NUNCA vao para o GitHub
+# =============================================================================
+# Planta de cliente e material confidencial de projeto. Mesmo em repositorio
+# privado, subir isso e mandar dado do cliente para servidor de terceiro - e
+# o historico do git guarda para sempre, entao tirar depois nao resolve.
+# O programa nao precisa delas: as plantas ficam no seu PC / OneDrive.
+ARQUIVOS DE TRABALHO/
+*.dxf
+*.dwg
+*.dwf
+*.bak
+*.xlsx
+*.xls
+
+# =============================================================================
+# Ambiente Python - cada PC faz o seu (rode "INSTALAR NO PC NOVO.bat")
+# =============================================================================
+# O .venv tem caminho absoluto da maquina que o criou: nao funciona em outro
+# PC, e sao 431 MB de sincronizacao a toa.
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# =============================================================================
+# Saidas do proprio programa
+# =============================================================================
+saida/
+_dxf_convertido/
+RESULTADOS/
+*.log
+
+# =============================================================================
+# Sistema operacional / editor
+# =============================================================================
+Thumbs.db
+desktop.ini
+.DS_Store
+.vscode/
+.idea/
+*.swp

@@ -1,0 +1,479 @@
+# =============================================================================
+# CONFIGURACAO DO EXTRATOR DE ACO
+#
+# Este arquivo foi CALIBRADO com a prancha "Prancha Exemplo Aco.dxf"
+# (Eberick/AltoQi, laje nervurada, armadura longitudinal inferior).
+# Os blocos marcados com [REVISAR] sao os que mudam de escritorio
+# para escritorio. Nao e preciso mexer no codigo Python.
+#
+# IMPORTANTE - TOLERANCIAS: as distancias NAO sao dadas em unidades de
+# desenho, e sim em MULTIPLOS DA ALTURA MEDIANA DO TEXTO da prancha,
+# medida automaticamente na leitura. Assim o mesmo config funciona em
+# pranchas desenhadas em metro, centimetro ou milimetro, e em pranchas
+# que misturam escalas (1:50 e 1:25 na mesma folha, como a de exemplo).
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# 1. CONVERSAO DWG -> DXF
+# -----------------------------------------------------------------------------
+conversao:
+  # Caminho do ODAFileConverter.exe. null = busca automatica nas pastas
+  # padrao de instalacao do Windows.
+  caminho_oda: null
+  versao_saida: "ACAD2018"
+  # Pasta dos DXF convertidos. null = subpasta "_dxf_convertido".
+  pasta_cache: null
+  # Reaproveita DXF ja convertido se for mais novo que o DWG de origem.
+  usar_cache: true
+  timeout_s: 900
+
+# -----------------------------------------------------------------------------
+# 2. UNIDADES  [REVISAR]
+# Referem-se ao que esta ESCRITO no texto, nao as coordenadas do desenho.
+# Na prancha de exemplo: "C=880" = 880 cm e "%%c10" = 10 mm.
+# -----------------------------------------------------------------------------
+unidades:
+  desenho: "cm"              # informativo; nao afeta o quantitativo
+  comprimento_texto: "cm"    # valor de C=
+  espacamento_texto: "cm"    # valor de c/
+  bitola_texto: "mm"
+
+# -----------------------------------------------------------------------------
+# 3. LAYERS  [REVISAR - o ponto mais importante da configuracao]
+# -----------------------------------------------------------------------------
+layers:
+  # Layers que delimitam os trechos.
+  #
+  # DOIS MODOS SUPORTADOS:
+  #  1) UMA LAYER POR TRECHO (recomendado): "TRECHO 01", "TRECHO 02"...
+  #     O nome da layer VIRA o nome do trecho e da nome a aba do Excel.
+  #     A poligonizacao e feita layer a layer, entao contornos de trechos
+  #     vizinhos nunca se misturam.
+  #  2) UMA LAYER SO ("AREA") com varias regioes: o nome vem do texto
+  #     interno ou vira AREA-01, AREA-02... sequencialmente.
+  #
+  # O contorno pode ser polilinha fechada OU linhas soltas: na prancha de
+  # exemplo a AREA sao 4 LINEs separadas e o programa monta o poligono.
+  area: ["TRECHO*", "AREA", "AREAS", "*_AREA"]
+
+  # Layers COMPLETAMENTE ignoradas (texto e geometria).
+  # A tabela de resumo de aco desenhada na propria prancha MORA AQUI:
+  # sem isso o aco seria contado duas vezes.
+  ignorar:
+    - "0"                     # generica; na prancha exemplo so tem hachura/circulos
+    - "DEFPOINTS"
+    - "VPORT"
+    - "SELO"
+    - "ALAN-FOLHA"
+    - "A-FOLHA"
+    - "PREFERE-NAO_LIGAR"
+    # --- tabela de resumo de aco do proprio desenho ---
+    - "TABELAS"
+    - "TABFER"
+    - "TABFER_QUADRO"
+    - "TEXTO_TABELAS"
+    - "*TABELA*"
+    - "*RESUMO*"
+    # --- detalhes tipicos / legendas (nao sao a laje) ---
+    - "A-TXT-*"
+    - "A-AUX-*"
+    - "A-LN-*"
+    - "A-PRO-*"
+    - "DT-*"
+    - "FO-*"
+    - "DESCRICAO DA ARMADURA"  # comparacao ignora acentos
+    - "ANOTACOES GENERICAS"
+    - "Textos"
+    # --- anotacao / apoio ---
+    - "*COTA*"
+    - "*DIM*"
+    - "*EIXO*"
+    - "*CARIMBO*"
+    - "*LEGENDA*"
+    - "*HACHURA*"
+    - "*HATCH*"
+    - "*TITULO*"
+
+  # Layers que contem o TEXTO das posicoes de armadura.
+  # Na prancha de exemplo: ARR_LONG_INF_TXT.
+  # Se um texto com cara de armadura aparecer numa layer fora desta lista,
+  # o programa NAO o ignora em silencio: reporta em INCONSISTENCIAS como
+  # "TEXTO_EM_LAYER_NAO_LIDA". Use esse aviso para ajustar a lista.
+  texto_armadura:
+    - "ARR_*"
+    - "*ARMAD*"
+    - "*FERRO*"
+    - "*ACO*"
+
+  # Layers com o DESENHO das barras.
+  geometria_barra:
+    - "ARR_*"
+    - "*ARMAD*"
+    - "*FERRO*"
+    - "*ACO*"
+
+  # Linetypes da linha tracejada de distribuicao.
+  linetypes_distribuicao: ["*DASH*", "*TRACEJ*", "*HIDDEN*", "*OCULTA*"]
+
+# -----------------------------------------------------------------------------
+# 4. LEITURA DO DXF
+# -----------------------------------------------------------------------------
+leitura:
+  # A armadura fica no Model Space; o Layout so tem viewports.
+  ler_paperspace: false
+  # Niveis de bloco aninhado a explodir.
+  profundidade_blocos: 3
+  # Fracao do perimetro: distancia maxima entre extremos para fechar
+  # automaticamente uma polilinha aberta da layer AREA.
+  tolerancia_fechamento_rel: 0.02
+  # Simplificacao (Douglas-Peucker) das barras antes de indexar,
+  # em fracao da altura do texto. 0 desativa.
+  tolerancia_simplificacao_rel: 0.02
+
+# -----------------------------------------------------------------------------
+# 5. PARSER DE TEXTO  [REVISAR]
+# -----------------------------------------------------------------------------
+parser:
+  decimal_virgula: true
+  quantidade_padrao: 1
+
+  # Bitolas aceitas (mm). Valor fora da lista vira INCONSISTENCIA em vez de
+  # entrar calado no quantitativo.
+  bitolas_validas: [4.2, 5.0, 6.0, 6.3, 8.0, 10.0, 12.5, 16.0, 20.0, 22.0, 25.0, 32.0, 40.0]
+  # Arredonda a bitola lida para a valida mais proxima dentro desta
+  # tolerancia (ex.: 12.4 -> 12.5). 0 desativa.
+  tolerancia_bitola: 0.3
+
+  # Faixa aceitavel de comprimento unitario, em cm. Fora disso -> ALERTA.
+  comprimento_min_cm: 5.0
+  comprimento_max_cm: 2000.0
+
+  # Um unico texto pode trazer DUAS posicoes unidas por "+":
+  #   "2N50-%%c10 C=300+2N51-%%c10 C=250"
+  # Na prancha de exemplo isso acontece 30 vezes.
+  separadores_multiplas_posicoes: ["+"]
+
+  # Codigos de controle do AutoCAD e simbolos equivalentes, trocados ANTES
+  # de aplicar as regex. %%c / %%C sao a forma como o Eberick grava o Ø.
+  substituicoes:
+    "%%c": "Ø"
+    "%%C": "Ø"
+    "%%d": "°"
+    "%%%": "%"
+    "ø": "Ø"
+    "φ": "Ø"
+    "Φ": "Ø"
+    "⌀": "Ø"
+
+  # ---------------------------------------------------------------------------
+  # PADROES REGEX - avaliados na ordem; o primeiro que casar vence.
+  # A ORDEM IMPORTA: padroes COM espacamento vem antes dos sem espacamento.
+  # Invertido, "25 N1 Ø10 C=420 C/15" casaria com o padrao sem espacamento
+  # e o "C/15" viraria observacao, perdendo o espacamento em silencio.
+  # Grupos nomeados: quantidade, posicao, bitola, espacamento, comprimento,
+  #                  comprimento_max, observacao.
+  # Aspas simples no YAML: a barra invertida fica literal.
+  # ---------------------------------------------------------------------------
+  padroes:
+    # -- formato real do Eberick na prancha de exemplo ----------------------
+    - nome: "eberick_distribuida"
+      descricao: "159N1-Ø10c/15 C=880  |  159N1-Ø10c/15 C=880-900"
+      regex: '^\s*(?P<quantidade>\d+)\s*N\s*(?P<posicao>\d+[A-Za-z]?)\s*[-–—]?\s*[Ø#]?\s*(?P<bitola>\d+(?:[.,]\d+)?)\s*(?:[Cc]\s*/|@|esp\.?\s*[:=]?)\s*(?P<espacamento>\d+(?:[.,]\d+)?)\s*(?:COMP|comp|[Cc])\s*[=:]\s*(?P<comprimento>\d+(?:[.,]\d+)?)(?:\s*[-–]\s*(?P<comprimento_max>\d+(?:[.,]\d+)?))?\s*(?P<observacao>.*)$'
+
+    - nome: "eberick_distribuida_sem_qtd"
+      descricao: "N1-Ø8c/10 C=283  |  N12-Ø8c/10 C=130-150  (com c/, SEM quantidade)"
+      # Formato muito comum nas pranchas de laje nervurada: a posicao traz o
+      # espacamento mas nao o numero de barras. Sem este padrao esses textos
+      # caiam em TEXTO_NAO_INTERPRETADO e o aco sumia do quantitativo.
+      # Exige o simbolo de bitola logo apos o traco, para nao competir com
+      # "N20-1Ø12.5 C=830" (onde o 1 e a quantidade).
+      regex: '^\s*N\s*(?P<posicao>\d+[A-Za-z]?)\s*[-–—]?\s*[Ø#]\s*(?P<bitola>\d+(?:[.,]\d+)?)\s*(?:[Cc]\s*/|@)\s*(?P<espacamento>\d+(?:[.,]\d+)?)\s*(?:COMP|comp|[Cc])\s*[=:]\s*(?P<comprimento>\d+(?:[.,]\d+)?)(?:\s*[-–]\s*(?P<comprimento_max>\d+(?:[.,]\d+)?))?\s*(?P<observacao>.*)$'
+
+    - nome: "ordem_invertida_comp_esp"
+      descricao: "25 N1 Ø10 C=420 C/15"
+      regex: '^\s*(?P<quantidade>\d+)\s*[xX*]?\s*N[\s.\-]?(?P<posicao>\d+[A-Za-z]?)\s*[-–—]?\s*[Ø#D]?\s*(?P<bitola>\d+(?:[.,]\d+)?)\s*(?:COMP|comp|[Cc])\s*[=:]\s*(?P<comprimento>\d+(?:[.,]\d+)?)\s*(?:[Cc]\s*/|@)\s*(?P<espacamento>\d+(?:[.,]\d+)?)\s*(?P<observacao>.*)$'
+
+    - nome: "eberick_unica"
+      descricao: "1N100-Ø12.5 C=1160  |  1N100-Ø12.5 C=1160-1200 (sem c/)"
+      regex: '^\s*(?P<quantidade>\d+)\s*N\s*(?P<posicao>\d+[A-Za-z]?)\s*[-–—]?\s*[Ø#]?\s*(?P<bitola>\d+(?:[.,]\d+)?)\s*(?:COMP|comp|[Cc])\s*[=:]\s*(?P<comprimento>\d+(?:[.,]\d+)?)(?:\s*[-–]\s*(?P<comprimento_max>\d+(?:[.,]\d+)?))?\s*(?P<observacao>.*)$'
+
+    # -- formato "de manual", com espacos e quantidade separada -------------
+    - nome: "espacado_distribuida"
+      descricao: "25 N1 Ø10 C/15 C=420"
+      regex: '^\s*(?P<quantidade>\d+)\s*[xX*]?\s+N[\s.\-]?(?P<posicao>\d+[A-Za-z]?)\s+[Ø#D]?\s*(?P<bitola>\d+(?:[.,]\d+)?)\s*(?:[Cc]\s*/|@|esp\.?\s*[:=]?)\s*(?P<espacamento>\d+(?:[.,]\d+)?)\s+(?:COMP|comp|[Cc])\s*[=:]\s*(?P<comprimento>\d+(?:[.,]\d+)?)(?:\s*[-–]\s*(?P<comprimento_max>\d+(?:[.,]\d+)?))?\s*(?P<observacao>.*)$'
+
+    - nome: "espacado_unica"
+      descricao: "N7 Ø12,5 C=340   (sem quantidade -> assume 1)"
+      regex: '^\s*N[\s.\-]?(?P<posicao>\d+[A-Za-z]?)\s*[-–—]?\s*[Ø#D]?\s*(?P<bitola>\d+(?:[.,]\d+)?)\s+(?:COMP|comp|[Cc])\s*[=:]\s*(?P<comprimento>\d+(?:[.,]\d+)?)(?:\s*[-–]\s*(?P<comprimento_max>\d+(?:[.,]\d+)?))?\s*(?P<observacao>.*)$'
+
+    - nome: "posicao_antes_quantidade"
+      descricao: "N1-8Ø16.0 C=180   (usado nos detalhes tipicos)"
+      regex: '^\s*N\s*(?P<posicao>\d+[A-Za-z]?)\s*[-–—]\s*(?P<quantidade>\d+)\s*[Ø#D]\s*(?P<bitola>\d+(?:[.,]\d+)?)\s*(?:COMP|comp|[Cc])\s*[=:]\s*(?P<comprimento>\d+(?:[.,]\d+)?)(?:\s*[-–]\s*(?P<comprimento_max>\d+(?:[.,]\d+)?))?\s*(?P<observacao>.*)$'
+
+  # Textos descartados SEM virar inconsistencia (ruido conhecido).
+  # O programa conta quantos foram descartados e informa no log e no Excel.
+  ignorar_textos:
+    - '^\s*$'
+    # numeros puros: sao as cotas de dobra desenhadas junto da barra
+    # (215 ocorrencias na prancha de exemplo, altura menor que a do texto
+    #  de armadura). Se o seu escritorio escreve posicao so com numero,
+    # REMOVA esta linha.
+    - '^\s*\d+(?:[.,]\d+)?\s*$'
+    - '(?i)^\s*esc(ala)?[\s.:]'
+    - '(?i)^\s*(planta|detalhe|corte|vista|obs|nota|total|elemento)\b'
+    - '(?i)^\s*(laje|viga|pilar)\s+\S+\s*$'
+    - '(?i)^\s*c\s*=\s*var'
+    - '^\s*[-.,;:/|()]+\s*$'
+
+# -----------------------------------------------------------------------------
+# 6. AGRUPAMENTO DE TEXTOS EMPILHADOS
+# Tolerancia em MULTIPLOS DA ALTURA DO TEXTO.
+# -----------------------------------------------------------------------------
+agrupamento:
+  # 3 alturas: textos a menos de 3x a altura sao do mesmo empilhamento.
+  tolerancia_alturas: 3.0
+  # Sobrescreve em unidades de desenho (null = usa o multiplo acima).
+  tolerancia_absoluta: null
+  # Tenta juntar um fragmento nao interpretado com o vizinho do grupo.
+  juntar_fragmentos: true
+  # Quebra MTEXT multilinha em uma posicao por linha.
+  quebrar_mtext: true
+
+# -----------------------------------------------------------------------------
+# 7. ASSOCIACAO TEXTO <-> BARRA
+# -----------------------------------------------------------------------------
+associacao:
+  # Raio de busca da barra, em multiplos da altura do texto.
+  raio_busca_alturas: 12.0
+  raio_busca_absoluto: null
+  max_candidatos: 12
+  # Score = peso_distancia * (dist/raio) + peso_angulo * (desalinhamento)
+  # Quanto MENOR o score, melhor a associacao.
+  peso_distancia: 1.0
+  peso_angulo: 0.6
+  # Diferenca angular a partir da qual o alinhamento e considerado ruim.
+  # O texto de armadura costuma ser paralelo a barra.
+  angulo_max_graus: 45.0
+  # Comprimento minimo (em alturas de texto) para uma geometria valer como
+  # barra, e nao como dobra solta ou ruido.
+  comprimento_min_barra_alturas: 2.0
+  # Acima deste score a associacao entra no relatorio como duvidosa.
+  score_suspeito: 0.65
+  # Se nenhuma barra for encontrada, usa o ponto do texto para classificar
+  # por area (a posicao continua no quantitativo, sem geometria).
+  usar_ponto_texto_se_falhar: true
+
+# -----------------------------------------------------------------------------
+# 8. AREAS
+# -----------------------------------------------------------------------------
+areas:
+  # O QUE FAZER COM A BARRA QUE CRUZA A DIVISA ENTRE TRECHOS
+  # (parte dentro de um, parte fora):
+  #
+  # maior_parte    -> (PADRAO) a barra INTEIRA vai para o trecho que contem
+  #                   o MAIOR COMPRIMENTO dela. Nada se perde: se a barra
+  #                   encostar em algum trecho, e contada nele por inteiro.
+  #                   E o criterio de "incluir tudo", que leva a eficacia
+  #                   a 100% quando o projeto esta todo delimitado.
+  # centroide      -> a barra inteira vai para o trecho que contem o PONTO
+  #                   MEDIO. Parece igual ao anterior, mas nao e: numa barra
+  #                   80% dentro de A cujo ponto medio caia em B, manda tudo
+  #                   para B - o lado errado.
+  # proporcional   -> rateia o peso pela fracao do comprimento dentro de
+  #                   cada trecho. Mais fiel fisicamente, mas quebra a
+  #                   posicao em varias linhas.
+  # fora_do_escopo -> a barra nao e contada em trecho nenhum; vai para a
+  #                   categoria FORA_DO_ESCOPO. Medicao conservadora: so
+  #                   conta o que esta inteiramente dentro do trecho.
+  criterio_divisa: "maior_parte"
+  # Nome da categoria das barras cortadas pelo contorno.
+  # Só é usada pelo criterio "fora_do_escopo"; com "maior_parte" ela fica
+  # vazia e a aba nem chega a ser criada.
+  nome_fora_escopo: "FORA_DO_ESCOPO"
+  # Fracao do comprimento da barra abaixo da qual a interseccao com o
+  # poligono conta como simples encoste, e nao como corte. Evita que uma
+  # barra tangente a divisa seja jogada para fora do escopo.
+  tolerancia_corte: 0.01
+  # Origem do nome do trecho, na ordem de preferencia.
+  #   nome_layer     -> o nome da layer e o nome do trecho (TRECHO 01...).
+  #                     Ignorado para layers genericas ("AREA", "0").
+  #   atributo_bloco -> atributo de um bloco dentro do poligono
+  #   texto_interno  -> maior texto dentro do poligono (nunca uma posicao
+  #                     de armadura nem uma cota)
+  #   sequencial     -> AREA-01, AREA-02...
+  fonte_nome: ["nome_layer", "atributo_bloco", "texto_interno", "sequencial"]
+  # Com limpar_prefixo_layer: true, a layer "TRECHO 01" vira o trecho "01".
+  # Padrao false: a aba fica "TRECHO 01", igual ao desenho.
+  prefixo_layer_trecho: "TRECHO"
+  limpar_prefixo_layer: false
+  prefixo_sequencial: "AREA"
+  layers_nome_area: ["*"]
+  # Monta poligono a partir de LINEs soltas na layer AREA.
+  # NECESSARIO na prancha de exemplo (a AREA sao 4 linhas separadas).
+  montar_de_segmentos: true
+  # Area minima do poligono, em multiplos do quadrado da altura do texto.
+  area_minima_alturas2: 100.0
+  tolerancia_sobreposicao: 0.001
+  nome_sem_area: "SEM_AREA"
+
+# -----------------------------------------------------------------------------
+# 8b. SENTIDO DA ARMADURA
+# Dentro da aba de cada trecho o aco e separado por sentido (as duas
+# direcoes da laje armada em cruz). O sentido vem do angulo da barra
+# desenhada, nao do texto.
+# -----------------------------------------------------------------------------
+sentido:
+  # Meia-abertura das faixas horizontal e vertical, em graus.
+  # 15 significa: 0+-15 = horizontal, 90+-15 = vertical, resto = inclinada.
+  tolerancia_graus: 15.0
+  nome_horizontal: "SENTIDO X (horizontal)"
+  nome_vertical: "SENTIDO Y (vertical)"
+  nome_inclinada: "SENTIDO INCLINADO"
+  nome_indefinido: "SEM GEOMETRIA"
+
+# -----------------------------------------------------------------------------
+# 8c. TABELA MESTRE (GABARITO)
+# A tabela de aco desenhada na propria prancha e usada como GABARITO: o
+# programa a le e mede o % de acerto do que extraiu das barras contra o
+# que o projeto declara. Estas layers continuam FORA do quantitativo -
+# se entrassem, o aco seria contado duas vezes.
+# -----------------------------------------------------------------------------
+tabela_mestre:
+  ativar: true
+  layers: ["TABFER*", "TEXTO_TABELAS", "TABELAS", "*RESUMO*"]
+  # Cada linha lida e validada por peso ~= comprimento x peso linear.
+  # A validacao existe para rejeitar leitura ESTRUTURALMENTE errada (celula
+  # intrusa faz o peso sair centenas de vezes maior), nao arredondamento.
+  tolerancia_validacao: 0.15
+  # Faixas do % de acerto:
+  #   >= acerto_meta    -> verde   "CONFERE"
+  #   >= acerto_minimo  -> amarelo "ACEITAVEL"
+  #   <  acerto_minimo  -> vermelho "ABAIXO DO MINIMO"
+  acerto_minimo: 0.96
+  acerto_meta: 0.99
+
+# -----------------------------------------------------------------------------
+# 9. CALCULO
+# -----------------------------------------------------------------------------
+calculo:
+  # Peso linear kg/m - NBR 7480. Editavel.
+  # Conferido contra a tabela do proprio DWG de exemplo (diferenca < 0.2%).
+  peso_linear:
+    4.2: 0.109
+    5.0: 0.154
+    6.0: 0.222
+    6.3: 0.245
+    8.0: 0.395
+    10.0: 0.617
+    12.5: 0.963
+    16.0: 1.578
+    20.0: 2.466
+    22.0: 2.984
+    25.0: 3.853
+    32.0: 6.313
+    40.0: 9.865
+
+  # Categoria por bitola. A prancha de exemplo classifica Ø5.0 como CA-60
+  # e Ø6.3 em diante como CA-50 - mesmo criterio adotado aqui.
+  categoria_por_bitola:
+    4.2: "CA-60"
+    5.0: "CA-60"
+    6.0: "CA-60"
+    6.3: "CA-50"
+    8.0: "CA-50"
+    10.0: "CA-50"
+    12.5: "CA-50"
+    16.0: "CA-50"
+    20.0: "CA-50"
+    22.0: "CA-50"
+    25.0: "CA-50"
+    32.0: "CA-50"
+    40.0: "CA-50"
+
+  # Sobrescreve a categoria de posicoes especificas. Ex.:  "12": "CA-60"
+  categoria_por_posicao: {}
+
+  # Perda: 0.10 = 10%.
+  perda_percentual: 0.10
+
+  # Recalcula a quantidade pela linha tracejada de distribuicao
+  # (ceil(extensao / espacamento)). Padrao false: o texto manda.
+  recalcular_quantidade: false
+  # Divergencia relativa tolerada entre a quantidade do texto e a calculada
+  # pela distribuicao, antes de virar inconsistencia.
+  tolerancia_divergencia_qtd: 0.15
+
+  casas_decimais:
+    comprimento_unitario: 0
+    comprimento_total: 2
+    peso: 2
+    percentual: 1
+
+# -----------------------------------------------------------------------------
+# 10. LIMITES DE CONSUMO POR AREA (aba VERIFICACAO)  [REVISAR]
+# -----------------------------------------------------------------------------
+limites:
+  # peso_com_perda | peso_liquido
+  base_comparacao: "peso_com_perda"
+  # A partir deste percentual pinta de amarelo.
+  percentual_alerta: 0.90
+
+  # --- ABA COMPARACAO FINAL ---
+  # Eficacia = peso atribuido a trechos nomeados / peso total extraido.
+  # Mede se TODOS os trechos da obra foram desenhados. Com o projeto
+  # inteiro delimitado o valor tende a 100%.
+  #   >= eficacia_meta    -> verde  "META ATINGIDA"
+  #   >= eficacia_minima  -> amarelo "ACEITAVEL"
+  #   <  eficacia_minima  -> vermelho "ABAIXO DO MINIMO"
+  eficacia_minima: 0.96
+  eficacia_meta: 0.999
+  # Limites em kg por area. Areas nao listadas aparecem como "sem limite".
+  por_area: {}
+  #  AREA-01:
+  #    total: 12000
+  #    por_bitola:
+  #      10.0: 3000
+  #      12.5: 4500
+  # Alternativa: planilha .xlsx/.csv com colunas  area | bitola | limite_kg
+  # (bitola vazia = limite total da area).
+  arquivo_limites: null
+
+# -----------------------------------------------------------------------------
+# 11. SAIDA
+# -----------------------------------------------------------------------------
+saida:
+  # MODO LIMPO (--limpo na linha de comando):
+  # a planilha fica so com as abas de trecho + RESUMO GERAL + COMPARACAO
+  # FINAL. A tabela CONTINUA com uma linha por posicao e o comprimento
+  # unitario de cada barra - e lista de corte e dobra, essa informacao
+  # nunca sai. O que e removido:
+  #   - o bloco DETALHAMENTO (uma linha por texto lido no desenho);
+  #   - as abas VERIFICACAO e INCONSISTENCIAS (o balanco de erros vira
+  #     uma linha de aviso no topo do RESUMO GERAL, e o detalhe continua
+  #     inteiro no extrator_aco.log).
+  modo_limpo: false
+  # Uma aba por trecho (nao uma aba por sentido).
+  abas_por_area: true
+  # Dentro da aba do trecho, separar o aco por sentido, cada secao com os
+  # proprios subtotais por bitola.
+  agrupar_por_sentido: true
+  max_abas_area: 60
+  incluir_prancha: true
+  # Colunas de diagnostico (handle, coordenadas, score da associacao).
+  # Deixe true ate confiar no resultado: sao elas que permitem achar a
+  # posicao no CAD para conferir.
+  incluir_diagnostico: true
+  cores:
+    ok: "#C6EFCE"
+    alerta: "#FFEB9C"
+    excedido: "#FFC7CE"
+    cabecalho: "#1F4E78"
+    subtotal: "#DDEBF7"
+
+# -----------------------------------------------------------------------------
+# 12. LOG
+# -----------------------------------------------------------------------------
+log:
+  nivel: "INFO"
+  arquivo: "extrator_aco.log"
+  sobrescrever: true

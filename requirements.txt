@@ -1,0 +1,14 @@
+# Extrator de Aco - dependencias
+# Instalacao:  pip install -r requirements.txt
+
+ezdxf>=1.3          # leitura de DXF (nao le DWG: ver conversor ODA no README)
+shapely>=2.0        # geometria, ponto-em-poligono e indice espacial STRtree
+pandas>=2.0         # agregacoes das tabelas
+XlsxWriter>=3.1     # escrita do .xlsx com formatacao
+openpyxl>=3.1       # leitura de planilhas de limites e testes do .xlsx
+pydantic>=2.0       # validacao do config.yaml
+PyYAML>=6.0         # leitura do config.yaml
+
+# --- opcionais ---
+pytest>=7.4         # testes
+streamlit>=1.30     # interface grafica (python -m streamlit run streamlit_app.py)
