@@ -72,7 +72,12 @@ def parser(cfg):
 # ele. Calibrar o programa em varias pranchas diferentes foi o que fez a
 # leitura andar de lado: um ajuste que melhorava uma piorava outra sem
 # ninguem perceber. Uma referencia unica torna qualquer regressao visivel.
-ARQUIVO_REFERENCIA = Path("C:/Users/nicol/OneDrive/Desktop/SEM NADA.dxf")
+# O caminho de sempre, no PC do autor. Se ele nao existir (outro PC, uma
+# maquina Linux), procuramos O MESMO desenho dentro do proprio repositorio:
+# continua sendo um unico arquivo de referencia, so que achado em outro
+# lugar. Sem isso os testes de prancha real ficam silenciosamente pulados.
+_PADRAO = Path("C:/Users/nicol/OneDrive/Desktop/SEM NADA.dxf")
+ARQUIVO_REFERENCIA = _PADRAO if _PADRAO.is_file() else RAIZ / "SEM NADA.dxf"
 
 
 @pytest.fixture(scope="session")
