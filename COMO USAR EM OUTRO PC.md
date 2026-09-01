@@ -14,6 +14,19 @@ Baixe em https://www.python.org/downloads/ e, **na primeira tela do
 instalador, marque a caixa `Add Python to PATH`**. É a caixa que quase
 todo mundo esquece; sem ela nada mais funciona.
 
+**Não precisa de senha de administrador.** Do jeito que vem, o Python
+instala só para o seu usuário. Só uma caixa pede administrador — a
+`Install launcher for all users` (em algumas versões, "usar privilégios
+de administrador para instalar o py.exe"). Se você não tem a senha,
+**desmarque essa** e siga: o programa funciona igual.
+
+Também não precisa de administrador para os passos 3 e 4: as bibliotecas
+vão para a pasta `.venv` dentro do projeto, e a tela abre em
+`127.0.0.1`, que é o próprio computador (por isso nem o aviso do Firewall
+do Windows costuma aparecer). A única exceção é o ODA File Converter, o
+conversor de `.dwg`, que em geral exige administrador — sem ele, use os
+arquivos `.dxf`.
+
 ## Passo 2 — trazer o projeto para o PC
 
 Escolha **um** dos dois caminhos:
