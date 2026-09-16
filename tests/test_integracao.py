@@ -405,3 +405,75 @@ def test_conferencia_acusa_posicao_que_nao_esta_na_tabela(cfg, dxf_referencia,
     linhas = exp._linhas_conferencia(
         montar_dataframe(resultado.posicoes, cfg), resultado)
     assert "NAO CONSTA NA TABELA" in {r["situacao"] for r in linhas}
+
+
+@pytest.mark.slow
+def test_conferencia_usa_a_tabela_DA_PRANCHA_da_barra(cfg, tmp_path):
+    """Num lote, `resultado.tabela_mestre` junta as tabelas de todas as
+    pranchas. Casar so por (posicao, bitola) fazia a ultima prancha lida
+    sobrescrever as anteriores: a barra de um desenho era conferida contra
+    a tabela de OUTRO, sem nenhum aviso."""
+    from extrator.calculo import montar_dataframe
+    from extrator.exportacao import Exportador
+    from extrator.modelos import PosicaoArmadura, ResultadoProcessamento
+    from extrator.tabela_mestre import LinhaMestre
+
+    def posicao(prancha, comp):
+        return PosicaoArmadura(
+            id=f"{prancha}-5", prancha=prancha, posicao="5", quantidade=1,
+            bitola_mm=10.0, comprimento_unit_cm=comp, espacamento_cm=None,
+            texto_origem="", area="TRECHO A", sentido="X",
+            peso_liquido_kg=1.0, peso_com_perda_kg=1.1,
+            comprimento_total_m=comp / 100)
+
+    def linha(prancha, comp):
+        return LinhaMestre(posicao="5", bitola_mm=10.0, quantidade=1,
+                           comprimento_total_cm=comp, peso_kg=1.0,
+                           comprimento_unitario_cm=comp, prancha=prancha)
+
+    resultado = ResultadoProcessamento()
+    # Mesma posicao N5 em duas pranchas, com comprimentos DIFERENTES.
+    resultado.posicoes = [posicao("PRANCHA A", 400.0), posicao("PRANCHA B", 700.0)]
+    resultado.tabela_mestre = [linha("PRANCHA A", 400.0), linha("PRANCHA B", 700.0)]
+
+    cfg.saida.modo_enxuto = True
+    linhas = Exportador(cfg)._linhas_conferencia(
+        montar_dataframe(resultado.posicoes, cfg), resultado)
+
+    por_prancha = {r["prancha"]: r for r in linhas}
+    assert set(por_prancha) == {"PRANCHA A", "PRANCHA B"}
+    # Cada barra conferida contra a SUA tabela - as duas conferem.
+    assert por_prancha["PRANCHA A"]["comp_tabela"] == 400.0
+    assert por_prancha["PRANCHA B"]["comp_tabela"] == 700.0
+    assert {r["situacao"] for r in linhas} == {"CONFERE"}
+
+
+@pytest.mark.slow
+def test_conferencia_nao_chuta_quando_as_pranchas_se_contradizem(cfg, tmp_path):
+    """Barra de uma prancha cuja tabela nao tem a posicao, e outra prancha
+    declara a mesma posicao com outra medida: escolher uma seria inventar."""
+    from extrator.calculo import montar_dataframe
+    from extrator.exportacao import Exportador
+    from extrator.modelos import PosicaoArmadura, ResultadoProcessamento
+    from extrator.tabela_mestre import LinhaMestre
+
+    resultado = ResultadoProcessamento()
+    resultado.posicoes = [PosicaoArmadura(
+        id="C-5", prancha="PRANCHA C", posicao="5", quantidade=1,
+        bitola_mm=10.0, comprimento_unit_cm=400.0, espacamento_cm=None,
+        texto_origem="", area="TRECHO A", sentido="X",
+        peso_liquido_kg=1.0, peso_com_perda_kg=1.1, comprimento_total_m=4.0)]
+    # Nenhuma linha da PRANCHA C; duas outras pranchas se contradizem.
+    resultado.tabela_mestre = [
+        LinhaMestre(posicao="5", bitola_mm=10.0, quantidade=1,
+                    comprimento_total_cm=400.0, peso_kg=1.0,
+                    comprimento_unitario_cm=400.0, prancha="PRANCHA A"),
+        LinhaMestre(posicao="5", bitola_mm=10.0, quantidade=1,
+                    comprimento_total_cm=700.0, peso_kg=1.0,
+                    comprimento_unitario_cm=700.0, prancha="PRANCHA B"),
+    ]
+
+    cfg.saida.modo_enxuto = True
+    linhas = Exportador(cfg)._linhas_conferencia(
+        montar_dataframe(resultado.posicoes, cfg), resultado)
+    assert linhas[0]["situacao"] == "NAO CONSTA NA TABELA"

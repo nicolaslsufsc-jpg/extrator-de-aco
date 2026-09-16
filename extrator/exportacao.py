@@ -138,6 +138,18 @@ def _nome_aba(nome: str, usados: set[str], projeto: str = "") -> str:
     return final
 
 
+def _difere(a, b) -> bool:
+    """Duas linhas de tabela mestre falam de barras diferentes?
+
+    Usado so para detectar colisao entre pranchas de um lote. Comparar o
+    comprimento unitario basta: e ele que identifica a peca de corte.
+    """
+    ca, cb = a.comprimento_unitario_cm, b.comprimento_unitario_cm
+    if ca is None or cb is None:
+        return ca is not cb
+    return abs(float(ca) - float(cb)) > 1.0
+
+
 class Exportador:
     """Escreve o .xlsx completo a partir do resultado do pipeline."""
 
@@ -893,10 +905,17 @@ class Exportador:
         """
         ws = wb.add_worksheet(nome)
         f = self.f
-        colunas = [("Trecho", 26), ("Posicao", 12), ("Bitola (mm)", 12),
-                   ("Qtd no desenho", 15), ("Comp. unit. desenho (cm)", 22),
-                   ("Comp. unit. tabela (cm)", 22), ("Qtd na tabela", 14),
-                   ("Situacao", 24)]
+        linhas = self._linhas_conferencia(df, resultado)
+        # A coluna Prancha so aparece no lote: numa prancha so, ela
+        # repetiria o mesmo nome em todas as linhas.
+        varias = len({r["prancha"] for r in linhas}) > 1
+        colunas = [("Trecho", 26)]
+        if varias:
+            colunas.append(("Prancha", 26))
+        colunas += [("Posicao", 12), ("Bitola (mm)", 12),
+                    ("Qtd no desenho", 15), ("Comp. unit. desenho (cm)", 22),
+                    ("Comp. unit. tabela (cm)", 22), ("Qtd na tabela", 14),
+                    ("Situacao", 24)]
         ncol = len(colunas)
         for j, (_, largura) in enumerate(colunas):
             ws.set_column(j, j, largura)
@@ -907,8 +926,6 @@ class Exportador:
         ws.set_row(0, 24)
         ws.merge_range(1, 0, 1, ncol - 1, self._subtitulo(resultado),
                        f["subtitulo"])
-
-        linhas = self._linhas_conferencia(df, resultado)
 
         # --- observacao: o unico lugar onde problema e reportado -------
         fmt, texto = self._observacao_conferencia(resultado, linhas,
@@ -927,20 +944,25 @@ class Exportador:
         linha += 1
 
         for r in linhas:
-            ws.write(linha, 0, r["trecho"], f["texto"])
-            ws.write(linha, 1, r["posicao"], f["texto_c"])
-            ws.write_number(linha, 2, r["bitola"], f["texto_c"])
-            ws.write_number(linha, 3, r["qtd_desenho"], f["qtd"])
-            ws.write_number(linha, 4, r["comp_desenho"], f["comp_unit"])
+            col = 0
+            ws.write(linha, col, r["trecho"], f["texto"]); col += 1
+            if varias:
+                ws.write(linha, col, r["prancha"], f["texto"]); col += 1
+            ws.write(linha, col, r["posicao"], f["texto_c"]); col += 1
+            ws.write_number(linha, col, r["bitola"], f["texto_c"]); col += 1
+            ws.write_number(linha, col, r["qtd_desenho"], f["qtd"]); col += 1
+            ws.write_number(linha, col, r["comp_desenho"], f["comp_unit"]); col += 1
             if r["comp_tabela"] is None:
-                ws.write(linha, 5, "-", f["texto_c"])
+                ws.write(linha, col, "-", f["texto_c"])
             else:
-                ws.write_number(linha, 5, r["comp_tabela"], f["comp_unit"])
+                ws.write_number(linha, col, r["comp_tabela"], f["comp_unit"])
+            col += 1
             if r["qtd_tabela"] is None:
-                ws.write(linha, 6, "-", f["texto_c"])
+                ws.write(linha, col, "-", f["texto_c"])
             else:
-                ws.write_number(linha, 6, r["qtd_tabela"], f["qtd"])
-            ws.write(linha, 7, r["situacao"], f[r["formato"]])
+                ws.write_number(linha, col, r["qtd_tabela"], f["qtd"])
+            col += 1
+            ws.write(linha, col, r["situacao"], f[r["formato"]])
             linha += 1
 
         ws.freeze_panes(cabecalho + 1, 2)
@@ -986,10 +1008,27 @@ class Exportador:
             return []
 
         # A tabela mestre guarda a posicao sem o "N" que o desenho usa.
-        por_chave = {(str(l.posicao), round(float(l.bitola_mm), 3)): l
-                     for l in resultado.tabela_mestre}
+        #
+        # Num lote, `resultado.tabela_mestre` traz as tabelas de TODAS as
+        # pranchas empilhadas. Casar so por (posicao, bitola) fazia a
+        # ultima prancha lida sobrescrever as anteriores em silencio: a
+        # barra de um desenho acabava conferida contra a tabela de outro.
+        # Por isso a busca e primeiro DENTRO DA PRANCHA da barra.
+        por_prancha: dict = {}
+        por_chave: dict = {}
+        ambigua: set = set()
+        for l in resultado.tabela_mestre:
+            chave = (str(l.posicao), round(float(l.bitola_mm), 3))
+            por_prancha.setdefault((str(l.prancha), *chave), l)
+            anterior = por_chave.setdefault(chave, l)
+            # Duas pranchas declarando a mesma posicao com medidas
+            # diferentes: sem saber de qual prancha veio a barra, nao da
+            # para escolher - e chutar seria pior que admitir.
+            if anterior is not l and _difere(anterior, l):
+                ambigua.add(chave)
 
-        chaves = ["Area", "Posicao", "Bitola (mm)", "Comprimento unitario (cm)"]
+        chaves = ["Area", "Prancha", "Posicao", "Bitola (mm)",
+                  "Comprimento unitario (cm)"]
         agrupado = (df.groupby(chaves, dropna=False)["Quantidade"]
                     .sum().reset_index())
 
@@ -998,7 +1037,11 @@ class Exportador:
             rotulo = str(r["Posicao"])
             bitola = float(r["Bitola (mm)"])
             comp = float(r["Comprimento unitario (cm)"])
-            mestre = por_chave.get((rotulo.lstrip("Nn"), round(bitola, 3)))
+            prancha = str(r["Prancha"])
+            chave = (rotulo.lstrip("Nn"), round(bitola, 3))
+            mestre = por_prancha.get((prancha, *chave))
+            if mestre is None and chave not in ambigua:
+                mestre = por_chave.get(chave)
 
             if mestre is None:
                 situacao, formato = "NAO CONSTA NA TABELA", "excedido"
@@ -1015,6 +1058,7 @@ class Exportador:
 
             linhas.append({
                 "trecho": str(r["Area"]),
+                "prancha": prancha,
                 "posicao": rotulo,
                 "bitola": bitola,
                 "qtd_desenho": float(r["Quantidade"]),

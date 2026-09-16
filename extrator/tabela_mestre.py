@@ -77,6 +77,12 @@ class LinhaMestre:
     variavel: bool = False
     # True quando a soma das pernas confere com o comprimento unitario.
     formato_conferido: bool = False
+    # Prancha de onde esta linha foi lida. Preenchido pelo pipeline.
+    # Num lote, cada prancha traz a SUA tabela e o `resultado.tabela_mestre`
+    # junta todas: sem este campo, duas pranchas com a posicao N5 viram uma
+    # chave so e a conferencia compara a barra de um desenho com a tabela
+    # do outro, calada.
+    prancha: str = ""
 
     @property
     def comprimento_total_m(self) -> float:

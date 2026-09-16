@@ -128,6 +128,21 @@ Se o `.venv` não existir (PC novo), rode `INSTALAR NO PC NOVO.bat`.
 adianta. Confira que o processo subiu *depois* da última alteração:
 comparar `(Get-Process -Id N).StartTime` com o mtime dos fontes.
 
+**O Streamlit reexecuta o arquivo inteiro a cada clique.** Resultado
+montado dentro do `if st.button("Processar")` some no clique seguinte —
+inclusive no do próprio botão de download. Por isso `executar()` grava tudo
+(resultado, df, bytes do `.xlsx`, log) em `st.session_state["execucao"]` e a
+tela é desenhada a partir dali, fora do bloco do botão. Testes travando isso:
+`tests/test_interface.py`.
+
+**`st.stop()` depois de um `st.error` esconde o erro.** A mensagem aparece e
+some no clique seguinte, e o `finally` de limpeza não roda. Erro vai para o
+`session_state` com o traceback, nunca para um `st.stop()`.
+
+**Caminho do Windows vem entre aspas.** O "Copiar como caminho" entrega
+`"C:\Obra\Pranchas"`. Passar isso direto para `Path` procura uma pasta cujo
+nome começa com aspas. Use `normalizar_caminho()`.
+
 **Script de patch tem que ter `assert` na âncora.** Um `replace` que não
 encontra o texto falha calado e deixa o arquivo velho, dando erro em outro
 lugar horas depois.
@@ -153,6 +168,7 @@ a poligonização é feita **por layer**, senão trechos vizinhos se fundem.
 | `extrator/rateio.py` | quantidade da tabela distribuída pelos trechos |
 | `extrator/pipeline.py` | orquestra; decide a fonte da quantidade |
 | `extrator/exportacao.py` | escreve o `.xlsx` (colunas por NOME, não índice) |
+| `streamlit_app.py` | a tela; resultado vive no `st.session_state` |
 | `config.yaml` | tudo configurável: layers, regex, perdas, tolerâncias |
 
 Documentação de fundo: `PREMISSAS.md`, `ARQUITETURA.md`, `README.md`.

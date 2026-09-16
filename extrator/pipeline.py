@@ -285,6 +285,11 @@ def _processar_prancha(caminho: Path, cfg: Config, leitor: LeitorDXF,
     if cfg.tabela_mestre.ativar and conteudo.textos_tabela:
         gabarito, avisos = LeitorTabelaMestre(cfg).ler(
             conteudo.textos_tabela, parser.normalizar)
+        # Carimbar a prancha ANTES de juntar no resultado: depois de
+        # misturado com o de outras pranchas nao da mais para saber de
+        # onde cada linha veio.
+        for linha_mestre in gabarito:
+            linha_mestre.prancha = conteudo.prancha
         resultado.tabela_mestre.extend(gabarito)
         est.linhas_tabela_mestre += len(gabarito)
         est.peso_tabela_mestre_kg += sum(l.peso_kg for l in gabarito)
