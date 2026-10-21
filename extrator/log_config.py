@@ -47,3 +47,19 @@ def configurar_log(cfg: LogCfg, pasta_saida: Path | None = None) -> logging.Logg
 
 def obter_log() -> logging.Logger:
     return logging.getLogger(NOME)
+
+
+def fechar_log() -> None:
+    """Fecha o arquivo de log e solta o handle.
+
+    No Windows nao se apaga um arquivo que ainda esta aberto: a pasta
+    temporaria do processamento ficava para tras a cada execucao, porque
+    o `rmtree` falhava calado no arquivo de log. No Linux apagar um
+    arquivo aberto e permitido, e por isso o problema so aparecia la.
+    """
+    logger = logging.getLogger(NOME)
+    for h in list(logger.handlers):
+        try:
+            h.close()
+        finally:
+            logger.removeHandler(h)

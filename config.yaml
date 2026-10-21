@@ -286,6 +286,30 @@ areas:
   #                   categoria FORA_DO_ESCOPO. Medicao conservadora: so
   #                   conta o que esta inteiramente dentro do trecho.
   criterio_divisa: "maior_parte"
+
+  # LOTE DE PRANCHAS DO MESMO PAVIMENTO (--herdar-contornos na linha de
+  # comando; "Aproveitar contornos entre as pranchas do lote" na tela).
+  #
+  # Num lote (longitudinal e transversal, superior e inferior) e comum o
+  # contorno de um trecho estar desenhado em umas pranchas e faltar em
+  # outras. Como cada prancha e classificada com os SEUS contornos, a
+  # armadura daquele trecho, nas pranchas sem o contorno, cai inteira em
+  # SEM_AREA - e o relatorio nao dizia que a causa era o contorno.
+  #
+  # Ligado, um contorno achado em qualquer prancha do lote vale para as
+  # que nao o tem. Mexe SO no que ficou em SEM_AREA: nenhuma barra ja
+  # classificada muda de trecho e o peso total nao se altera.
+  #
+  # So acontece entre pranchas no MESMO sistema de coordenadas, provado
+  # pelos trechos que elas duas tem: se os poligonos de mesmo nome nao
+  # coincidem (abaixo de sobreposicao_minima_lote), o emprestimo e
+  # recusado e reportado. Prancha sem nenhum contorno proprio nao herda:
+  # nao ha como provar o alinhamento.
+  #
+  # Desligado, nada e movido, mas o quanto seria recuperado e reportado
+  # no topo da aba CONFERENCIA e no log.
+  herdar_contornos_do_lote: false
+  sobreposicao_minima_lote: 0.90
   # Nome da categoria das barras cortadas pelo contorno.
   # Só é usada pelo criterio "fora_do_escopo"; com "maior_parte" ela fica
   # vazia e a aba nem chega a ser criada.

@@ -204,6 +204,24 @@ class AreasCfg(_Base):
     # 1:50. Nenhum contorno intencionalmente aberto erra por tao pouco.
     tolerancia_costura_alturas: float = Field(0.01, ge=0)
     tolerancia_sobreposicao: float = Field(0.001, ge=0, le=1)
+    # LOTE DE PRANCHAS DO MESMO PAVIMENTO (longitudinal/transversal,
+    # superior/inferior): o contorno de um trecho costuma estar desenhado
+    # em umas pranchas e faltar em outras. Como cada prancha e classificada
+    # com os SEUS proprios contornos, a armadura daquele trecho nas pranchas
+    # sem o contorno cai inteira em SEM_AREA.
+    #
+    # Ligado, um contorno achado em qualquer prancha do lote e emprestado
+    # as pranchas que nao o tem - e SO entao, e SO sobre o que ficou em
+    # SEM_AREA. Nenhuma barra ja classificada muda de trecho e nenhum peso
+    # e criado: o que estava solto passa a ter dono.
+    #
+    # Emprestar so acontece se as pranchas estiverem no mesmo sistema de
+    # coordenadas, provado pelos trechos que ELAS DUAS tem: se os poligonos
+    # de mesmo nome nao coincidem, o emprestimo e recusado e reportado.
+    herdar_contornos_do_lote: bool = False
+    # Quanto dois poligonos de mesmo nome precisam coincidir (0 a 1) para
+    # as pranchas serem consideradas no mesmo sistema de coordenadas.
+    sobreposicao_minima_lote: float = Field(0.90, ge=0, le=1)
     nome_sem_area: str = "SEM_AREA"
     # Categoria das barras cortadas pelo contorno da AREA (criterio
     # `fora_do_escopo`): estao parcialmente dentro e parcialmente fora.

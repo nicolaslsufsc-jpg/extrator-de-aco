@@ -35,7 +35,7 @@ from extrator.calculo import (montar_dataframe, resumo_por_area,
 from extrator.config import Config, carregar_config
 from extrator.conversor import coletar_arquivos, localizar_oda
 from extrator.exportacao import Exportador
-from extrator.log_config import configurar_log
+from extrator.log_config import configurar_log, fechar_log
 from extrator.pipeline import processar
 
 RAIZ = Path(__file__).resolve().parent
@@ -115,6 +115,20 @@ with st.sidebar:
              "proporcional: rateia pelo comprimento dentro de cada trecho.\n"
              "fora_do_escopo: não conta em trecho nenhum.",
     )
+
+    cfg.areas.herdar_contornos_do_lote = st.checkbox(
+        "Aproveitar contornos entre as pranchas do lote",
+        cfg.areas.herdar_contornos_do_lote,
+        help="Para um lote de pranchas do MESMO pavimento (longitudinal e "
+             "transversal, superior e inferior). Quando o contorno de um "
+             "trecho está desenhado em umas pranchas e falta em outras, a "
+             "armadura daquele trecho nas pranchas sem o contorno cai "
+             "inteira em SEM_AREA. Marcado, o contorno achado em qualquer "
+             "prancha vale para as que não o têm.\n\n"
+             "Só mexe no que ficou fora de trecho — nenhuma barra já "
+             "classificada muda, e o peso total não se altera. Só acontece "
+             "se as pranchas estiverem no mesmo sistema de coordenadas, "
+             "provado pelos trechos que elas têm em comum.")
 
     cfg.saida.abas_por_area = st.checkbox("Gerar uma aba por trecho", True)
     cfg.saida.agrupar_por_sentido = st.checkbox(
@@ -228,9 +242,7 @@ def executar(entrada: Path, cfg: Config, nome_projeto: str,
     st.session_state.pop("execucao", None)
     try:
         configurar_log(cfg.log, saida)
-        cfg.projeto = (nome_projeto.strip()
-                       or (entrada.stem if entrada.is_file() else entrada.name)
-                       or "Projeto")
+        cfg.projeto = nome_projeto.strip() or _nome_automatico(entrada)
 
         resultado = processar(entrada, cfg)
         df = montar_dataframe(resultado.posicoes, cfg)
@@ -266,11 +278,33 @@ def executar(entrada: Path, cfg: Config, nome_projeto: str,
             "entrada": str(entrada),
         }
     finally:
+        # O Windows nao apaga arquivo aberto: sem fechar o log antes, o
+        # rmtree falhava calado e a pasta ficava no Temp a cada execucao.
+        fechar_log()
         # A pasta dos arquivos enviados era apagada so no caminho feliz;
         # dando erro, ficava para tras a cada tentativa.
         if temporaria:
             shutil.rmtree(temporaria, ignore_errors=True)
         shutil.rmtree(saida, ignore_errors=True)
+
+
+def _nome_automatico(entrada: Path) -> str:
+    """Nome do projeto quando o campo esta em branco.
+
+    Enviando arquivos pelo botao, a entrada e uma pasta temporaria do
+    Windows - e era o nome DELA (extrator_aco_ui_ungknypq) que ia parar no
+    prefixo de todas as abas do Excel. Nesse caso vale o nome da prancha,
+    ou "Lote" quando sao varias.
+    """
+    if entrada.is_file():
+        return entrada.stem
+    if entrada.name.startswith("extrator_aco_ui_"):
+        pranchas = sorted(p.stem for p in entrada.iterdir()
+                          if p.suffix.lower() in (".dxf", ".dwg"))
+        if len(pranchas) == 1:
+            return pranchas[0]
+        return "Lote" if pranchas else "Projeto"
+    return entrada.name or "Projeto"
 
 
 def _ler_log(saida: Path, cfg: Config) -> str:

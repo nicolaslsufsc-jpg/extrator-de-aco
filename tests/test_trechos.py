@@ -11,6 +11,7 @@ import pytest
 from extrator.exportacao import Exportador
 from extrator.log_config import configurar_log
 from extrator.pipeline import processar
+from extrator.modelos import TipoInconsistencia
 
 
 # =============================================================================
@@ -583,3 +584,102 @@ def test_modo_enxuto_vale_mais_que_o_modo_limpo(cfg_trechos, prancha_trechos,
     wb, _ = _abrir(cfg_trechos, prancha_trechos, tmp_path)
     assert not [a for a in wb.sheetnames if "RESUMO GERAL" in a.upper()]
     assert [a for a in wb.sheetnames if "CONFER" in a.upper()]
+
+
+# =============================================================================
+# LOTE: contorno de trecho faltando numa prancha
+# Caso real: 4 pranchas do mesmo pavimento (longitudinal/transversal,
+# superior/inferior). O contorno do TRECHO A estava em duas delas e faltava
+# nas outras duas - e 6 toneladas cairam em SEM_AREA sem nada no relatorio
+# dizer que a causa era o contorno, e nao armadura fora de escopo.
+# =============================================================================
+
+def _lote_com_contorno_faltando(tmp_path, deslocar=0.0):
+    """Duas pranchas do mesmo pavimento; a segunda sem a layer TRECHO 02."""
+    import ezdxf
+
+    pasta = tmp_path / "lote"
+    pasta.mkdir()
+    base = _prancha_dois_trechos(pasta / "Longitudinal inferior.dxf")
+
+    doc = ezdxf.readfile(base)
+    msp = doc.modelspace()
+    for e in [x for x in msp if x.dxf.layer.upper() == "TRECHO 02"]:
+        msp.delete_entity(e)
+    if deslocar:
+        for e in msp:
+            try:
+                e.translate(deslocar, deslocar, 0)
+            except Exception:
+                pass
+    doc.saveas(pasta / "Longitudinal superior.dxf")
+    return pasta
+
+
+def _rodar(cfg, pasta, tmp_path, herdar):
+    cfg.areas.herdar_contornos_do_lote = herdar
+    configurar_log(cfg.log, tmp_path)
+    return processar(pasta, cfg)
+
+
+def test_lote_avisa_que_falta_contorno_mesmo_sem_herdar(cfg_trechos, tmp_path):
+    """Desligado nao se move nada, mas o relatorio NAO pode ficar mudo:
+    antes, toneladas em SEM_AREA sem uma linha dizendo o porque."""
+    pasta = _lote_com_contorno_faltando(tmp_path)
+    res = _rodar(cfg_trechos, pasta, tmp_path, herdar=False)
+
+    assert res.estatisticas.posicoes_recuperaveis_do_lote > 0
+    assert res.estatisticas.posicoes_herdadas_do_lote == 0
+    tipos = {i.tipo for i in res.inconsistencias}
+    assert TipoInconsistencia.CONTORNO_FALTANDO_NA_PRANCHA in tipos
+
+
+def test_lote_herda_o_contorno_da_outra_prancha(cfg_trechos, tmp_path):
+    pasta = _lote_com_contorno_faltando(tmp_path)
+    res = _rodar(cfg_trechos, pasta, tmp_path, herdar=True)
+
+    assert res.estatisticas.posicoes_herdadas_do_lote > 0
+    # A armadura que estava solta passou a ter dono.
+    sem = cfg_trechos.areas.nome_sem_area
+    assert sum(1 for p in res.posicoes if p.area == sem) < 4
+
+
+def test_herdar_contorno_NAO_altera_o_peso_total(cfg_trechos, tmp_path):
+    """A garantia central: herdar move barra de trecho, nunca cria nem
+    perde aco. Se o peso mudar, o rateio da fracao esta errado."""
+    pasta = _lote_com_contorno_faltando(tmp_path)
+    antes = _rodar(cfg_trechos, pasta, tmp_path, herdar=False)
+    depois = _rodar(cfg_trechos, pasta, tmp_path, herdar=True)
+
+    peso = lambda r: round(sum(p.peso_com_perda_kg for p in r.posicoes), 9)
+    assert peso(antes) == peso(depois)
+
+
+def test_nao_herda_entre_pranchas_de_sistemas_diferentes(cfg_trechos, tmp_path):
+    """Pranchas com origens diferentes: emprestar o contorno poria a
+    armadura num trecho que nao e o dela. Tem de recusar."""
+    pasta = _lote_com_contorno_faltando(tmp_path, deslocar=5000.0)
+    res = _rodar(cfg_trechos, pasta, tmp_path, herdar=True)
+
+    assert res.estatisticas.posicoes_herdadas_do_lote == 0
+    descricoes = " ".join(i.descricao for i in res.inconsistencias)
+    assert "sistema de coordenadas" in descricoes
+
+
+def test_prancha_sem_contorno_nenhum_nao_herda_as_cegas(cfg_trechos, tmp_path):
+    """Sem nenhum trecho em comum nao da para provar o alinhamento."""
+    import ezdxf
+
+    pasta = tmp_path / "lote2"
+    pasta.mkdir()
+    base = _prancha_dois_trechos(pasta / "A.dxf")
+    doc = ezdxf.readfile(base)
+    msp = doc.modelspace()
+    for e in [x for x in msp if x.dxf.layer.upper().startswith("TRECHO")]:
+        msp.delete_entity(e)
+    doc.saveas(pasta / "B.dxf")
+
+    res = _rodar(cfg_trechos, pasta, tmp_path, herdar=True)
+    assert res.estatisticas.posicoes_herdadas_do_lote == 0
+    descricoes = " ".join(i.descricao for i in res.inconsistencias)
+    assert "NENHUM contorno" in descricoes

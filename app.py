@@ -124,6 +124,11 @@ def montar_parser() -> argparse.ArgumentParser:
                         "CONFERENCIA (cada barra desenhada consta na tabela "
                         "do projeto?). Problemas viram uma observacao no "
                         "topo dela, sem aba de avisos")
+    p.add_argument("--herdar-contornos", action="store_true",
+                   help="lote de pranchas do mesmo pavimento: um contorno de "
+                        "trecho achado em qualquer prancha vale para as que "
+                        "nao o tem. So mexe no que ficou em SEM_AREA e nao "
+                        "altera o peso total")
     p.add_argument("--sem-abas-area", action="store_true",
                    help="gera so o resumo geral, sem uma aba por area")
     p.add_argument("--diagnostico", action="store_true",
@@ -157,6 +162,8 @@ def main(argv: list[str] | None = None) -> int:
         cfg.saida.modo_limpo = True
     if args.enxuto:
         cfg.saida.modo_enxuto = True
+    if args.herdar_contornos:
+        cfg.areas.herdar_contornos_do_lote = True
     if args.sem_abas_area:
         cfg.saida.abas_por_area = False
     cfg.projeto = args.projeto or nome_do_projeto(Path(args.input))

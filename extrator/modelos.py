@@ -193,6 +193,10 @@ class TipoInconsistencia(str, Enum):
         "Dois rotulos de extensao equidistantes - quantidade a conferir")
     CONVERSAO_FALHOU = "Falha na conversao DWG para DXF"
     RECORTE_DETECTADO = "Desenho e um recorte - tabela do projeto nao usada"
+    CONTORNO_FALTANDO_NA_PRANCHA = (
+        "Trecho desenhado em outra prancha do lote, faltando nesta")
+    CONTORNO_HERDADO_DO_LOTE = (
+        "Armadura classificada por contorno de outra prancha do lote")
     RESUMO = "Resumo informativo"
 
 
@@ -245,6 +249,10 @@ class Estatisticas:
     posicoes_sem_localizacao: int = 0
     posicoes_fora_do_gabarito: int = 0
     escala_estimada: Optional[float] = None   # cm reais por unidade de desenho
+    # Lote: posicoes que estavam soltas e entraram num trecho emprestado
+    # de outra prancha; e, com a opcao desligada, quantas entrariam.
+    posicoes_herdadas_do_lote: int = 0
+    posicoes_recuperaveis_do_lote: int = 0
     linhas_tabela_mestre: int = 0
     peso_tabela_mestre_kg: float = 0.0
     altura_texto_mediana: Optional[float] = None

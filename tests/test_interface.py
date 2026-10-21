@@ -182,3 +182,45 @@ def test_erro_nao_deixa_pasta_temporaria_para_tras(pasta_com_a_prancha,
     _processar(_app().run(), pasta_com_a_prancha)
     depois = {p for p in raiz.glob("extrator_aco_*")}
     assert depois == antes, f"sobrou lixo no disco: {depois - antes}"
+
+
+def test_fechar_log_solta_o_arquivo(tmp_path):
+    """No Windows nao se apaga arquivo aberto: sem soltar o log antes, a
+    pasta temporaria do processamento ficava para tras a cada execucao."""
+    import logging
+
+    from extrator.config import LogCfg
+    from extrator.log_config import NOME, configurar_log, fechar_log
+
+    configurar_log(LogCfg(), tmp_path)
+    assert logging.getLogger(NOME).handlers, "o log tinha de estar aberto"
+    fechar_log()
+    assert not logging.getLogger(NOME).handlers, "o arquivo continuou preso"
+
+
+def test_nome_do_projeto_nao_vira_o_nome_da_pasta_temporaria(tmp_path):
+    """Enviando arquivos pelo botao, a entrada e uma pasta temporaria do
+    Windows, e era o nome DELA (extrator_aco_ui_ungknypq) que ia parar no
+    prefixo de todas as abas do Excel."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("app_tela", RAIZ_APP)
+    # O modulo roda a tela inteira ao importar; basta ler a funcao do fonte.
+    fonte = Path(RAIZ_APP).read_text(encoding="utf-8")
+    ns: dict = {"Path": Path}
+    inicio = fonte.index("def _nome_automatico")
+    fim = fonte.index("def _ler_log")
+    exec(fonte[inicio:fim], ns)
+    nome_automatico = ns["_nome_automatico"]
+
+    temp = tmp_path / "extrator_aco_ui_ungknypq"
+    temp.mkdir()
+    (temp / "Longitudinal inferior.dxf").write_text("x")
+    assert nome_automatico(temp) == "Longitudinal inferior"
+
+    (temp / "Transversal superior.dxf").write_text("x")
+    assert nome_automatico(temp) == "Lote"
+
+    normal = tmp_path / "Obra X"
+    normal.mkdir()
+    assert nome_automatico(normal) == "Obra X"

@@ -1094,11 +1094,15 @@ class Exportador:
         f = self.f
         avisos: list[str] = []
 
-        if not resultado.tabela_mestre:
-            return (f["alerta"],
-                    "Nenhuma tabela de aco foi lida na prancha: nao ha contra "
-                    "o que conferir. As abas de trecho continuam validas; "
-                    f"o motivo esta no {self.cfg.log.arquivo}.")
+        # Sem tabela mestre nao da para conferir barra por barra - mas os
+        # DEMAIS problemas continuam valendo e nao podem ser engolidos
+        # junto. Antes este caso devolvia aqui mesmo, e um contorno de
+        # trecho faltando no lote nao chegava a aparecer.
+        sem_tabela = not resultado.tabela_mestre
+        if sem_tabela:
+            avisos.append("nenhuma tabela de aco foi lida: nao ha contra o "
+                          "que conferir barra a barra (as abas de trecho "
+                          "continuam validas)")
 
         c = self._contar_situacoes(linhas)
         if c["ausente"]:
@@ -1118,7 +1122,24 @@ class Exportador:
         if not df.empty:
             soltas = int((df["Area"].isin(sem_area)).sum())
             if soltas:
-                avisos.append(f"{soltas} barra(s) fora de qualquer trecho")
+                peso = float(df[df["Area"].isin(sem_area)]
+                             ["Peso com perda (kg)"].sum())
+                total = float(df["Peso com perda (kg)"].sum()) or 1.0
+                kg = f"{peso:,.0f}".replace(",", ".")
+                avisos.append(f"{soltas} barra(s) fora de qualquer trecho "
+                              f"({kg} kg, {peso / total * 100:.0f}% do total)")
+
+        # Os ERROS do processamento. Sem aba de inconsistencias, este e o
+        # unico lugar onde eles podem aparecer - e foi justamente um deles
+        # (contorno de trecho faltando numa prancha do lote) que explicava
+        # toneladas soltas sem nada no relatorio dizendo por que.
+        erros = {}
+        for i in resultado.inconsistencias:
+            if i.severidade is Severidade.ERRO:
+                erros.setdefault(i.tipo.value, i)
+        for tipo, inc in erros.items():
+            onde = f" [{inc.prancha}]" if inc.prancha else ""
+            avisos.append(f"{tipo}{onde}: {inc.descricao}")
 
         if self.cfg.saida.abas_por_area and not df.empty:
             faltando = len(self._ordenar_areas(df)) - len(areas_exportadas)
@@ -1131,7 +1152,8 @@ class Exportador:
                     f"Nenhum problema: as {len(linhas)} barra(s) desenhadas "
                     f"constam na tabela do projeto, com o mesmo comprimento.")
 
-        formato = f["excedido"] if (c["ausente"] or nao_lidos) else f["alerta"]
+        formato = (f["excedido"] if (c["ausente"] or nao_lidos or erros)
+                   else f["alerta"])
         return (formato, "CONFERIR: " + "; ".join(avisos)
                 + f".  Detalhe completo no {self.cfg.log.arquivo}.")
 

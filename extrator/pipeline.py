@@ -73,9 +73,190 @@ def processar(entrada: Path, cfg: Config) -> ResultadoProcessamento:
                 f"erro ao processar a prancha: {exc}", prancha=caminho.stem,
             ))
 
+    # ---- contornos emprestados entre pranchas do lote ----------------
+    _herdar_contornos_do_lote(resultado, cfg)
+
     est.tempo_s = time.perf_counter() - inicio
     _registrar_resumo(resultado, cfg)
     return resultado
+
+
+# =============================================================================
+def _herdar_contornos_do_lote(resultado: ResultadoProcessamento,
+                              cfg: Config) -> None:
+    """Empresta o contorno de um trecho as pranchas do lote que nao o tem.
+
+    Num lote de pranchas do MESMO pavimento (longitudinal/transversal,
+    superior/inferior), e comum o contorno de um trecho estar desenhado em
+    umas e faltar em outras. Como cada prancha e classificada com os seus
+    proprios contornos, a armadura daquele trecho, nas pranchas sem o
+    contorno, cai inteira em SEM_AREA - e nada no relatorio dizia que a
+    causa era o contorno faltando, e nao armadura fora de escopo.
+
+    So mexe no que ficou em SEM_AREA: nenhuma barra ja classificada muda de
+    trecho, e o peso total nao se altera (as fracoes somam 1).
+
+    Com a opcao desligada nada e movido, mas o quanto seria recuperado e
+    medido e reportado - senao a saida continuaria sem dizer que existe
+    uma saida.
+    """
+    log = obter_log()
+    est = resultado.estatisticas
+    sem_area = cfg.areas.nome_sem_area
+    soltas = [p for p in resultado.posicoes if p.area == sem_area]
+    if not soltas or len(resultado.pranchas) < 2:
+        return
+
+    por_prancha: dict[str, list] = defaultdict(list)
+    for a in resultado.areas:
+        por_prancha[a.prancha].append(a)
+
+    movidas = recuperaveis = 0
+    novas_posicoes: list[PosicaoArmadura] = []
+    # Percorre as PRANCHAS, nao os contornos: justamente a prancha sem
+    # contorno nenhum e a que precisa herdar, e ela nao aparece no mapa
+    # por_prancha.
+    for prancha in sorted(set(resultado.pranchas)):
+        lista = por_prancha.get(prancha, [])
+        proprios = {a.nome for a in lista}
+        doadoras = _contornos_de_outras_pranchas(por_prancha, prancha, proprios)
+        if not doadoras:
+            continue
+
+        if not lista:
+            # Sem nenhum trecho proprio nao ha como provar que esta prancha
+            # esta no mesmo sistema de coordenadas das outras. Emprestar as
+            # cegas poria a armadura num trecho que pode nao ser o dela.
+            resultado.adicionar(Inconsistencia(
+                TipoInconsistencia.CONTORNO_FALTANDO_NA_PRANCHA,
+                Severidade.ERRO,
+                f"a prancha '{prancha}' nao tem NENHUM contorno de trecho, "
+                f"enquanto outras do lote tem. Toda a armadura dela caiu em "
+                f"{sem_area}. Nenhum contorno foi emprestado: sem um trecho "
+                f"em comum nao da para provar que as pranchas estao no mesmo "
+                f"sistema de coordenadas - desenhe os contornos nesta prancha",
+                prancha=prancha))
+            continue
+
+        # Mesmo sistema de coordenadas? Os trechos que as duas pranchas
+        # TEM em comum sao a prova: se nao coincidem, emprestar poria a
+        # armadura num lugar que nao e o dela.
+        doadoras = [a for a in doadoras
+                    if _mesmo_sistema(lista, por_prancha[a.prancha], cfg,
+                                      prancha, a.prancha, resultado)]
+        if not doadoras:
+            continue
+
+        classificador = ClassificadorAreas(doadoras, cfg)
+        for pos in [p for p in soltas if p.prancha == prancha]:
+            fatias = [(n, f) for n, f in classificador.classificar(
+                          pos.x_repr, pos.y_repr, pos.geometria_barra)
+                      if n not in (sem_area, cfg.areas.nome_fora_escopo) and f > 0]
+            if not fatias:
+                continue
+            recuperaveis += 1
+            if not cfg.areas.herdar_contornos_do_lote:
+                continue
+            # A primeira fatia reaproveita a posicao; as demais viram
+            # copias, como faria a classificacao normal no criterio
+            # proporcional. `calcular` refaz os pesos pela fracao.
+            for i, (nome, fracao) in enumerate(fatias):
+                alvo_pos = pos if i == 0 else _copiar_posicao(pos)
+                alvo_pos.area = nome
+                alvo_pos.fracao_area = fracao
+                alvo_pos.id = f"{alvo_pos.handle_texto}-{alvo_pos.posicao}-{nome}"
+                calcular(alvo_pos, cfg)
+                if i:
+                    novas_posicoes.append(alvo_pos)
+            movidas += 1
+
+    if not recuperaveis:
+        return
+
+    if cfg.areas.herdar_contornos_do_lote:
+        resultado.posicoes.extend(novas_posicoes)
+        est.posicoes_geradas += len(novas_posicoes)
+        est.posicoes_sem_area -= movidas
+        est.posicoes_herdadas_do_lote = movidas
+        log.info("  contornos do lote: %d posicao(oes) que estavam em %s "
+                 "entraram em trechos desenhados em OUTRA prancha",
+                 movidas, sem_area)
+        resultado.adicionar(Inconsistencia(
+            TipoInconsistencia.CONTORNO_HERDADO_DO_LOTE, Severidade.ALERTA,
+            f"{movidas} posicao(oes) foram classificadas por um contorno "
+            f"desenhado em outra prancha do lote (areas."
+            f"herdar_contornos_do_lote). Confira no CAD se o trecho "
+            f"realmente cobre essa armadura", ocorrencias=movidas))
+    else:
+        est.posicoes_recuperaveis_do_lote = recuperaveis
+        log.warning("  %d posicao(oes) em %s cairiam em trechos desenhados em "
+                    "OUTRA prancha do lote. Ligue areas."
+                    "herdar_contornos_do_lote para aproveita-las",
+                    recuperaveis, sem_area)
+        resultado.adicionar(Inconsistencia(
+            TipoInconsistencia.CONTORNO_FALTANDO_NA_PRANCHA, Severidade.ERRO,
+            f"{recuperaveis} posicao(oes) ficaram em {sem_area} por falta de "
+            f"contorno NESTA prancha, mas caem dentro de um trecho desenhado "
+            f"em outra prancha do lote. Ou desenhe o contorno que falta, ou "
+            f"ligue areas.herdar_contornos_do_lote",
+            ocorrencias=recuperaveis))
+
+
+def _contornos_de_outras_pranchas(por_prancha: dict, prancha: str,
+                                  proprios: set) -> list:
+    """Contornos com nome que esta prancha nao tem, um por nome."""
+    vistos: dict[str, object] = {}
+    for outra, lista in sorted(por_prancha.items()):
+        if outra == prancha:
+            continue
+        for a in lista:
+            if a.nome not in proprios and a.nome not in vistos:
+                vistos[a.nome] = a
+    return list(vistos.values())
+
+
+def _mesmo_sistema(areas_a: list, areas_b: list, cfg: Config,
+                   nome_a: str, nome_b: str,
+                   resultado: ResultadoProcessamento) -> bool:
+    """As duas pranchas estao no mesmo sistema de coordenadas?
+
+    Prova pelos trechos de MESMO NOME que as duas tem: se os poligonos se
+    sobrepoem, as pranchas estao alinhadas e emprestar contorno faz
+    sentido. Se nao se sobrepoem, o desenho tem outra origem e emprestar
+    poria a armadura num trecho que nao e o dela.
+    """
+    de_b = {a.nome: a for a in areas_b}
+    comuns = [(a, de_b[a.nome]) for a in areas_a if a.nome in de_b]
+    if not comuns:
+        resultado.adicionar(Inconsistencia(
+            TipoInconsistencia.CONTORNO_FALTANDO_NA_PRANCHA, Severidade.ALERTA,
+            f"as pranchas '{nome_a}' e '{nome_b}' nao tem nenhum trecho de "
+            f"mesmo nome, entao nao da para provar que estao no mesmo "
+            f"sistema de coordenadas; nenhum contorno foi emprestado",
+            prancha=nome_a))
+        return False
+
+    for a, b in comuns:
+        inter = a.poligono.intersection(b.poligono).area
+        uniao = a.poligono.union(b.poligono).area
+        if not uniao or inter / uniao < cfg.areas.sobreposicao_minima_lote:
+            resultado.adicionar(Inconsistencia(
+                TipoInconsistencia.CONTORNO_FALTANDO_NA_PRANCHA,
+                Severidade.ALERTA,
+                f"o trecho '{a.nome}' esta em lugares diferentes nas pranchas "
+                f"'{nome_a}' e '{nome_b}' (sobreposicao "
+                f"{(inter / uniao if uniao else 0) * 100:.0f}%). As pranchas "
+                f"nao estao no mesmo sistema de coordenadas e nenhum contorno "
+                f"foi emprestado entre elas",
+                prancha=nome_a, layer=a.layer))
+            return False
+    return True
+
+
+def _copiar_posicao(pos: PosicaoArmadura) -> PosicaoArmadura:
+    """Copia rasa de uma posicao, para dividi-la entre trechos."""
+    import copy
+    return copy.copy(pos)
 
 
 # =============================================================================
@@ -461,10 +642,35 @@ def _registrar_resumo(resultado: ResultadoProcessamento, cfg: Config) -> None:
     if e.linhas_tabela_mestre:
         log.info("  tabela mestre do desenho ..... %d linhas, %.1f kg",
                  e.linhas_tabela_mestre, e.peso_tabela_mestre_kg)
+    if e.posicoes_herdadas_do_lote:
+        log.info("    herdadas de outra prancha .. %d",
+                 e.posicoes_herdadas_do_lote)
+    if e.posicoes_recuperaveis_do_lote:
+        log.info("    recuperaveis pelo lote ..... %d (ligue "
+                 "areas.herdar_contornos_do_lote)",
+                 e.posicoes_recuperaveis_do_lote)
     log.info("  PESO LIQUIDO ................. %.1f kg", liquido)
     log.info("  PESO COM PERDA (%.0f%%) ........ %.1f kg",
              cfg.calculo.perda_percentual * 100, peso)
     log.info("  tempo ........................ %.1f s", e.tempo_s)
+
+    # Os erros e alertas tambem no LOG, nao so na planilha. Um contorno de
+    # trecho faltando custou toneladas em SEM_AREA sem nada aparecer aqui:
+    # o log era o primeiro lugar onde se procurava, e estava mudo.
+    graves = [i for i in resultado.inconsistencias
+              if i.severidade in (Severidade.ERRO, Severidade.ALERTA)]
+    if graves:
+        log.info("-" * 70)
+        log.info("A CONFERIR (%d)", len(graves))
+        vistos: set = set()
+        for i in graves:
+            chave = (i.severidade.value, i.tipo.value, i.prancha)
+            if chave in vistos:
+                continue
+            vistos.add(chave)
+            onde = f" [{i.prancha}]" if i.prancha else ""
+            log.info("  %-7s %s%s: %s", i.severidade.value, i.tipo.value,
+                     onde, i.descricao)
     log.info("=" * 70)
 
     if e.textos_ignorados_ruido:

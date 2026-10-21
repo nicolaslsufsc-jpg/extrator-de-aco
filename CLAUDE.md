@@ -97,7 +97,28 @@ bitola e comprimento unitário. Teste travando isso:
 `COMPARACAO FINAL`) e o modo completo também. Com os dois ligados, o
 enxuto vence.
 
-### 7. Trecho é o nome da layer
+### 7. Lote: contorno que falta numa prancha
+
+Num lote do mesmo pavimento (longitudinal/transversal, superior/inferior),
+cada prancha é classificada com **os seus próprios contornos**. Se o
+contorno do `TRECHO A` está em duas pranchas e falta nas outras duas, a
+armadura daquele trecho nas pranchas sem o contorno cai inteira em
+`SEM_AREA`. Aconteceu de verdade: 6.280 kg (10% da obra) soltos, e o
+relatório não dizia que a causa era o contorno.
+
+`areas.herdar_contornos_do_lote` (`--herdar-contornos`) empresta o contorno
+achado em qualquer prancha às que não o têm. **Mexe só no que ficou em
+`SEM_AREA`** — nenhuma barra já classificada muda de trecho e o peso total
+não se altera (teste: `test_herdar_contorno_NAO_altera_o_peso_total`).
+
+Só empresta entre pranchas no **mesmo sistema de coordenadas**, provado
+pelos trechos que elas duas têm: se os polígonos de mesmo nome não
+coincidem, recusa e reporta. Prancha sem nenhum contorno próprio não herda.
+
+Desligado (o padrão) nada é movido, mas **o quanto seria recuperado é
+medido e reportado** — a saída não pode omitir que existe uma saída.
+
+### 8. Trecho é o nome da layer
 
 Uma layer `TRECHO A` vira o trecho `TRECHO A`. Nomes vindos de layer **nunca**
 são desambiguados: se a mesma layer aparecer em dois lugares, é o mesmo
@@ -142,6 +163,15 @@ some no clique seguinte, e o `finally` de limpeza não roda. Erro vai para o
 **Caminho do Windows vem entre aspas.** O "Copiar como caminho" entrega
 `"C:\Obra\Pranchas"`. Passar isso direto para `Path` procura uma pasta cujo
 nome começa com aspas. Use `normalizar_caminho()`.
+
+**O log e a aba `CONFERENCIA` têm de mostrar os ERROS.** No modo enxuto não
+há aba de inconsistências: se o erro não entrar na observação do topo da
+`CONFERENCIA` e na seção `A CONFERIR` do log, ele não existe para o usuário.
+Foi assim que um contorno faltando custou 6 t em silêncio.
+
+**No Windows não se apaga arquivo aberto.** O `rmtree` da pasta temporária
+falhava calado no arquivo de log e a pasta ficava no Temp a cada execução.
+Chame `fechar_log()` antes de apagar. No Linux o problema não aparece.
 
 **Script de patch tem que ter `assert` na âncora.** Um `replace` que não
 encontra o texto falha calado e deixa o arquivo velho, dando erro em outro
