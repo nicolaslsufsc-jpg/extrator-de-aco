@@ -463,6 +463,42 @@ limites:
   arquivo_limites: null
 
 # -----------------------------------------------------------------------------
+# 10b. MALHA DECLARADA EM TABELA  [REVISAR por obra]
+#
+# A malha (tela de Ø5.0 sobre o EPS, por exemplo) NAO e desenhada barra a
+# barra na prancha: ela aparece so como uma tabela a parte, com o total de
+# barras do pavimento inteiro. Nao ha o que ler no desenho.
+#
+# O programa reparte esse total entre os trechos pelo PESO DE ARMADURA de
+# cada um: quem concentra 30% do aco leva 30% da malha. E a melhor
+# proporcao disponivel sem medir area de laje, porque a armadura ja
+# acompanha o tamanho e a carga de cada regiao.
+#
+# O arredondamento e SEMPRE para cima, trecho a trecho: nao se compra
+# fracao de barra, e faltar na obra custa mais do que sobrar. Por isso a
+# soma pode passar alguns barras do total da tabela.
+# -----------------------------------------------------------------------------
+malha:
+  ativar: false
+  descricao: "MALHA DE 2Ø5.0 SOBRE CADA EPS, TRASPASSE DE 30cm"
+  bitola_mm: 5.0
+  categoria: "CA-60"
+  # O que a tabela da prancha declara para o pavimento INTEIRO.
+  quantidade_barras: 0
+  comprimento_unitario_cm: 1200.0
+  # Peso de uma barra como esta na tabela. null = calcula pela bitola
+  # (0.154 kg/m x 12 m = 1.85 kg). Vale o declarado: e o numero que o
+  # projetista conferiu.
+  peso_por_barra_kg: 1.8
+  # Folga de corte/traspasse, somada as BARRAS antes de repartir, para
+  # cada trecho ja receber a sua parte da folga.
+  acrescimo_percentual: 0.05
+  # Trechos que ja foram comprados: continuam na tabela com a parte deles
+  # calculada, mas ficam FORA do total a comprar.
+  #   trechos_ja_comprados: ["TRECHO D"]
+  trechos_ja_comprados: []
+
+# -----------------------------------------------------------------------------
 # 11. SAIDA
 # -----------------------------------------------------------------------------
 saida:

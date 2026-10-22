@@ -162,6 +162,48 @@ with st.sidebar:
              "achar a posição no CAD para conferir.")
 
     st.divider()
+    st.subheader("Malha")
+    cfg.malha.ativar = st.checkbox(
+        "Incluir a malha declarada em tabela", cfg.malha.ativar,
+        help="A malha (tela sobre o EPS) não é desenhada barra a barra: a "
+             "prancha só traz a tabela com o total do pavimento. Marcado, "
+             "o programa reparte esse total entre os trechos pelo peso de "
+             "armadura de cada um e gera a aba MALHA.")
+    if cfg.malha.ativar:
+        cfg.malha.descricao = st.text_input(
+            "Descrição (como está na tabela)", cfg.malha.descricao)
+        c1, c2 = st.columns(2)
+        cfg.malha.quantidade_barras = c1.number_input(
+            "Barras na tabela", min_value=0, step=1,
+            value=int(cfg.malha.quantidade_barras),
+            help="O total do pavimento inteiro, como está na tabela.")
+        cfg.malha.peso_por_barra_kg = c2.number_input(
+            "Peso por barra (kg)", min_value=0.001, step=0.1, format="%.3f",
+            value=float(cfg.malha.peso_por_barra_kg or 1.8))
+        c3, c4 = st.columns(2)
+        cfg.malha.bitola_mm = c3.number_input(
+            "Bitola (mm)", min_value=0.1, step=0.1,
+            value=float(cfg.malha.bitola_mm))
+        cfg.malha.comprimento_unitario_cm = c4.number_input(
+            "Comprimento (cm)", min_value=1.0, step=10.0,
+            value=float(cfg.malha.comprimento_unitario_cm))
+        cfg.malha.acrescimo_percentual = st.slider(
+            "Acréscimo nas barras (%)", 0, 30,
+            int(cfg.malha.acrescimo_percentual * 100),
+            help="Folga de corte e traspasse. Entra nas barras ANTES de "
+                 "repartir, para cada trecho já receber a sua parte.") / 100
+        ja = st.text_input(
+            "Trechos já comprados (separados por vírgula)",
+            ", ".join(cfg.malha.trechos_ja_comprados),
+            help="Ficam na tabela com a parte deles calculada, mas fora do "
+                 "total a comprar. Ex.: TRECHO D")
+        cfg.malha.trechos_ja_comprados = [t.strip() for t in ja.split(",")
+                                          if t.strip()]
+        total = cfg.malha.quantidade_barras * (cfg.malha.peso_por_barra_kg or 0)
+        st.caption(f"Tabela: {cfg.malha.quantidade_barras} barras = "
+                   f"{total:,.1f} kg".replace(",", "."))
+
+    st.divider()
     exe = localizar_oda(cfg.conversao.caminho_oda)
     if exe:
         st.success(f"ODA File Converter: `{exe.name}`")

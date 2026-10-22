@@ -36,6 +36,9 @@ def _restaurar_cfg(cfg):
         "por_sentido": cfg.saida.agrupar_por_sentido,
         "modo_limpo": cfg.saida.modo_limpo,
         "modo_enxuto": cfg.saida.modo_enxuto,
+        # A malha e do mesmo tipo: test_malha liga e configura, e sem
+        # restaurar a aba MALHA apareceria nos testes seguintes.
+        "malha": cfg.malha.model_copy(deep=True),
         "fonte_qtd": cfg.calculo.fonte_quantidade,
         "limpar_prefixo": cfg.areas.limpar_prefixo_layer,
         # test_trechos aponta as layers para o DXF sintetico; sem restaurar,
@@ -55,6 +58,8 @@ def _restaurar_cfg(cfg):
     cfg.saida.agrupar_por_sentido = guardado["por_sentido"]
     cfg.saida.modo_limpo = guardado["modo_limpo"]
     cfg.saida.modo_enxuto = guardado["modo_enxuto"]
+    for campo, valor in guardado["malha"].model_dump().items():
+        setattr(cfg.malha, campo, valor)
     cfg.calculo.fonte_quantidade = guardado["fonte_qtd"]
     cfg.areas.limpar_prefixo_layer = guardado["limpar_prefixo"]
     cfg.layers.texto_armadura = guardado["texto_armadura"]

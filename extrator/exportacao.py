@@ -27,6 +27,7 @@ from .calculo import (agrupar_por_posicao, eficacia_por_bitola,
                       montar_dataframe, resumo_por_area,
                       resumo_por_bitola)
 from .config import Config
+from .malha import distribuir, pesos_dos_trechos
 from .log_config import obter_log
 from .modelos import ResultadoProcessamento, Severidade
 
@@ -76,6 +77,7 @@ ABREVIACOES = {
     "FORA_DO_ESCOPO": "FORA ESCOPO",
     "COMPARACAO FINAL": "COMPARACAO",
     "CONFERENCIA": "CONFER",
+    "MALHA": "MALHA",
 }
 
 LIMITE_ABA = 31
@@ -174,6 +176,8 @@ class Exportador:
             sufixos = ["RESUMO GERAL", "COMPARACAO FINAL"]
             if not limpo:
                 sufixos += ["VERIFICACAO", "INCONSISTENCIAS"]
+        if self.cfg.malha.ativar:
+            sufixos.append("MALHA")
         if self.cfg.saida.abas_por_area and not df.empty:
             sufixos += self._ordenar_areas(df)[:self.cfg.saida.max_abas_area]
         projeto = _prefixo_comum(self.cfg.projeto, sufixos)
@@ -226,6 +230,12 @@ class Exportador:
                         "%d area(s) alem do limite saida.max_abas_area=%d ficaram "
                         "so no RESUMO GERAL e na VERIFICACAO",
                         len(ordem) - limite, limite)
+
+            # --- 2b. malha declarada em tabela -------------------------
+            # Fica ANTES da conferencia porque e aba de compra, nao de
+            # leitura: quem abre a planilha procura ela junto dos trechos.
+            if self.cfg.malha.ativar:
+                self._aba_malha(wb, _nome_aba("MALHA", usados, projeto), df)
 
             # --- 3. conferencia contra a tabela mestre -----------------
             # No modo enxuto esta e a UNICA aba alem das de trecho.
@@ -881,6 +891,102 @@ class Exportador:
     # ==================================================================
     # ABA VERIFICACAO
     # ==================================================================
+    # ==================================================================
+    # ABA DA MALHA (declarada em tabela, repartida pelos trechos)
+    # ==================================================================
+    def _aba_malha(self, wb, nome: str, df: pd.DataFrame) -> None:
+        """Quanto da malha cabe a cada trecho, e quanto comprar.
+
+        A malha nao e desenhada barra a barra: a prancha so traz a tabela
+        com o total do pavimento. A reparticao e pelo PESO DE ARMADURA de
+        cada trecho - quem concentra 30% do aco leva 30% da malha.
+        """
+        m = self.cfg.malha
+        r = distribuir(pesos_dos_trechos(df, self.cfg), self.cfg)
+        ws = wb.add_worksheet(nome)
+        f = self.f
+
+        colunas = [("Trecho", 26), ("Peso de armadura (kg)", 22),
+                   ("% do total", 12), ("Barras da malha", 16),
+                   ("Peso da malha (kg)", 20), ("Situacao", 18)]
+        ncol = len(colunas)
+        for j, (_, largura) in enumerate(colunas):
+            ws.set_column(j, j, largura)
+
+        ws.merge_range(0, 0, 0, ncol - 1, f"MALHA - {m.descricao}", f["titulo"])
+        ws.set_row(0, 24)
+        ws.merge_range(
+            1, 0, 1, ncol - 1,
+            f"Tabela da prancha: {r.barras_tabela} barra(s) de "
+            f"\u00d8{m.bitola_mm:g} {m.categoria}, "
+            f"{m.comprimento_unitario_cm / 100:g} m, "
+            f"{r.peso_por_barra_kg:g} kg/barra = "
+            f"{r.barras_tabela * r.peso_por_barra_kg:,.1f} kg.   "
+            f"Acrescimo de {m.acrescimo_percentual * 100:.0f}% aplicado as "
+            f"barras.   Reparticao pelo peso de armadura de cada trecho; "
+            f"arredondamento SEMPRE para cima (nao se compra fracao de "
+            f"barra).".replace(",", "."), f["subtitulo"])
+
+        if not r.linhas:
+            ws.write(3, 0, "Nenhum trecho com armadura para repartir a malha.",
+                     f["texto"])
+            return
+
+        linha = 3
+        for j, (rotulo, _) in enumerate(colunas):
+            ws.write(linha, j, rotulo, f["cabecalho"])
+        cabecalho = linha
+        linha += 1
+
+        for l in r.linhas:
+            ws.write(linha, 0, l.trecho, f["texto"])
+            ws.write_number(linha, 1, l.peso_armadura_kg, f["peso"])
+            ws.write_number(linha, 2, l.fracao, f["pct"])
+            ws.write_number(linha, 3, l.barras, f["qtd"])
+            ws.write_number(linha, 4, l.peso_kg, f["peso"])
+            if l.ja_comprado:
+                ws.write(linha, 5, "JA COMPRADO", f["alerta"])
+            else:
+                ws.write(linha, 5, "COMPRAR", f["ok"])
+            linha += 1
+
+        total_arm = sum(l.peso_armadura_kg for l in r.linhas)
+        ws.write(linha, 0, "TOTAL", f["tot_txt"])
+        ws.write_number(linha, 1, total_arm, f["tot_num"])
+        ws.write_number(linha, 2, 1.0, f["pct"])
+        ws.write_number(linha, 3, r.barras_total, f["tot_num"])
+        ws.write_number(linha, 4, r.peso_total_kg, f["tot_num"])
+        ws.write_blank(linha, 5, None, f["tot_txt"])
+        linha += 2
+
+        # --- o numero que vai para a compra ---------------------------
+        ws.merge_range(linha, 0, linha, ncol - 1, "O QUE COMPRAR", f["titulo"])
+        linha += 1
+        comprados = [l.trecho for l in r.linhas if l.ja_comprado]
+        for rotulo, barras, peso in [
+                ("Barras a comprar", r.barras_a_comprar, r.peso_a_comprar_kg)]:
+            ws.write(linha, 0, rotulo, f["sub_txt"])
+            ws.write_number(linha, 1, barras, f["sub_qtd"])
+            ws.write(linha, 2, "barras", f["texto"])
+            ws.write_number(linha, 3, peso, f["sub_num"])
+            ws.write(linha, 4, "kg", f["texto"])
+            linha += 1
+        if comprados:
+            ws.merge_range(
+                linha, 0, linha, ncol - 1,
+                f"Fora da compra: {', '.join(comprados)} "
+                f"(ja comprado). A parte desse(s) trecho(s) continua "
+                f"calculada acima, mas nao entra no total a comprar.",
+                f["subtitulo"])
+            linha += 1
+        ws.merge_range(
+            linha, 0, linha, ncol - 1,
+            "A soma das barras pode passar do total da tabela: cada trecho "
+            "e arredondado para cima, e a folga fica por conta da obra.",
+            f["subtitulo"])
+
+        ws.freeze_panes(cabecalho + 1, 1)
+
     # ==================================================================
     # ABA DE CONFERENCIA (modo enxuto)
     # ==================================================================

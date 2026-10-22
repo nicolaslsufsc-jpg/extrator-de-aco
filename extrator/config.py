@@ -393,6 +393,31 @@ class CoresCfg(_Base):
     subtotal: str = "#DDEBF7"
 
 
+class MalhaCfg(_Base):
+    """Malha declarada em tabela, nao desenhada barra a barra.
+
+    A tela de Ø5.0 sobre o EPS aparece na prancha so como uma tabela a
+    parte, com o total de barras do pavimento. Nao ha o que ler no desenho:
+    o total e declarado aqui e repartido entre os trechos pelo PESO DE
+    ARMADURA de cada um.
+    """
+    ativar: bool = False
+    descricao: str = "MALHA"
+    bitola_mm: float = Field(5.0, gt=0)
+    categoria: str = "CA-60"
+    # O que a tabela da prancha declara para o pavimento INTEIRO.
+    quantidade_barras: int = Field(0, ge=0)
+    comprimento_unitario_cm: float = Field(1200.0, gt=0)
+    # Peso de uma barra, como esta na tabela. Nulo = calcula pela bitola.
+    # Vale o declarado: e o numero que o projetista conferiu.
+    peso_por_barra_kg: Optional[float] = Field(None, gt=0)
+    # Folga de corte/traspasse, somada as BARRAS antes de repartir.
+    acrescimo_percentual: float = Field(0.05, ge=0, le=1)
+    # Trechos que ja foram comprados: continuam na tabela, com a parte
+    # deles calculada, mas ficam FORA do total a comprar.
+    trechos_ja_comprados: list[str] = []
+
+
 class SaidaCfg(_Base):
     # MODO LIMPO: a planilha fica so com as abas de trecho, o RESUMO
     # GERAL e a COMPARACAO FINAL.
@@ -439,6 +464,7 @@ class Config(_Base):
     calculo: CalculoCfg
     limites: LimitesCfg = LimitesCfg()
     saida: SaidaCfg = SaidaCfg()
+    malha: MalhaCfg = MalhaCfg()
     log: LogCfg = LogCfg()
 
     # ---------------------------------------------------------------------
